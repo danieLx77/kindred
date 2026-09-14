@@ -1,0 +1,86 @@
+name: Bug
+description: Report reproducible incorrect behavior in Kindred.
+title: "[Bug]: "
+labels:
+  - "type: bug"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve Kindred.
+        Provide enough information for another developer to reproduce and verify the problem.
+
+  - type: textarea
+    id: current-behavior
+    attributes:
+      label: Current behavior
+      description: What is currently happening?
+      placeholder: Describe the incorrect behavior.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: Expected behavior
+      description: What should happen instead?
+      placeholder: Describe the expected behavior.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Provide the smallest reliable reproduction possible.
+      placeholder: |
+        1. Go to ...
+        2. Select ...
+        3. Click ...
+        4. Observe ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Provide environment information when relevant.
+      placeholder: |
+        Browser:
+        OS:
+        Device:
+        Environment:
+        Branch/commit:
+    validations:
+      required: false
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: Add screenshots, logs, console output, or other useful evidence. Do not include secrets.
+    validations:
+      required: false
+
+  - type: textarea
+    id: references
+    attributes:
+      label: Related requirements or issues
+      description: Reference related requirements, acceptance criteria, or issues when applicable.
+      placeholder: |
+        - RF-XX
+        - CA-XX
+        - #123
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: verification
+    attributes:
+      label: Verification
+      options:
+        - label: I checked that an equivalent open issue does not already exist.
+          required: true
+        - label: This report does not contain credentials, tokens, or other secrets.
+          required: true

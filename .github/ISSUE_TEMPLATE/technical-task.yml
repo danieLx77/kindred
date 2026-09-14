@@ -1,0 +1,76 @@
+name: Technical Task
+description: Track engineering work that does not directly represent a user-facing feature.
+title: "[Task]: "
+labels:
+  - "type: technical-task"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form for infrastructure, tooling, CI/CD, refactoring,
+        architecture, testing setup, or other technical work.
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Why is this technical work necessary?
+      placeholder: Describe the engineering problem, limitation, or need.
+    validations:
+      required: true
+
+  - type: textarea
+    id: objective
+    attributes:
+      label: Objective
+      description: What technical outcome should be achieved?
+      placeholder: Describe the intended result.
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: Define what is included and, when useful, explicitly excluded.
+      placeholder: |
+        Included:
+        - ...
+
+        Out of scope:
+        - ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: done-criteria
+    attributes:
+      label: Done criteria
+      description: Define how the task can be objectively verified.
+      placeholder: |
+        - [ ] ...
+        - [ ] ...
+        - [ ] ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: references
+    attributes:
+      label: References
+      description: Reference relevant ADRs, requirements, test strategy sections, documentation, or related issues.
+      placeholder: |
+        - ADR-XXX
+        - RNF-XX
+        - docs/...
+        - #123
+    validations:
+      required: false
+
+  - type: textarea
+    id: risks
+    attributes:
+      label: Risks or dependencies
+      description: Mention blockers, external dependencies, migrations, compatibility concerns, or security considerations.
+    validations:
+      required: false
