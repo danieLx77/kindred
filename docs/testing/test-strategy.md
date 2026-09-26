@@ -380,7 +380,7 @@ O frontend já possui comandos de lint (`npm run lint`), build (`npm run build`)
 
 ### Backend
 
-Ainda não há ferramentas nem comandos de lint, verificação de tipos, testes ou formatação configurados para o backend. Essas escolhas e sua automação permanecem pendentes.
+Os testes unitários e da API usam pytest. Testes assíncronos usam pytest-asyncio; respostas HTTP externas podem ser controladas com respx; pytest-cov gera relatórios de cobertura sem um limite mínimo. Ruff verifica lint e formatação; Pyright verifica tipos. O ambiente é gerenciado por uv, e os comandos locais estão no [README](../../README.md).
 
 ## 14. Cobertura
 
@@ -423,7 +423,7 @@ Devem existir fixtures para:
 
 ### Local
 
-Desenvolvedores executam as verificações atualmente disponíveis para o componente alterado. No frontend, os comandos existentes estão no README. A execução de testes automatizados e as verificações correspondentes do backend dependem da configuração dessas ferramentas.
+Desenvolvedores executam as verificações disponíveis para o componente alterado. No frontend, os comandos existentes estão no README. No backend, lint, formatação, tipos, testes e cobertura são executados via uv conforme o README.
 
 ### Pull Request
 

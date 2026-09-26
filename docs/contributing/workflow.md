@@ -619,7 +619,7 @@ O objetivo do review é melhorar o produto e compartilhar conhecimento, não dem
 
 # 11. CI
 
-O repositório ainda não possui pipeline de CI. Antes de abrir um Pull Request, execute as verificações locais disponíveis no frontend:
+O repositório ainda não possui pipeline de CI. Antes de abrir um Pull Request, execute as verificações locais disponíveis para os componentes alterados.
 
 ```bash
 cd frontend
@@ -630,7 +630,7 @@ npm run build
 
 O lint executa Oxlint para as verificações rápidas que ele suporta e ESLint para complementar regras e plugins necessários. O Oxfmt é responsável pela formatação; use `npm run format` para aplicá-la quando `npm run format:check` apontar diferenças. Os comandos e a instalação estão no [README](../../README.md).
 
-Não há comandos de testes ou de qualidade configurados para o backend neste momento. Testes e CI permanecem objetivos futuros da estratégia de testes, mas ainda não são checks obrigatórios do Pull Request.
+Para alterações no backend, sincronize o ambiente com `uv sync --locked` dentro de `backend/` e execute lint e formatação com Ruff, análise de tipos com Pyright, testes e cobertura antes do PR. Os comandos diretos estão no [README](../../README.md). Essas verificações são locais; ainda não há checks obrigatórios de CI para o backend.
 
 Como objetivo futuro, os checks poderão cobrir frontend e backend:
 

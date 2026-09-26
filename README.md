@@ -5,7 +5,7 @@ Aplicação web para descoberta de projetos sociais. O repositório contém um f
 ## Pré-requisitos
 
 - Node.js e npm;
-- Python e pip.
+- Python 3.10 ou superior e [uv](https://docs.astral.sh/uv/getting-started/installation/) para o backend.
 
 ## Frontend
 
@@ -31,18 +31,37 @@ O lint executa Oxlint seguido de ESLint; o Oxlint cobre rapidamente as regras su
 
 ## Backend
 
-Prepare o ambiente virtual e instale as dependências:
+Sincronize o ambiente com as versões registradas em `uv.lock`:
 
 ```bash
 cd backend
-python -m venv .venv
-source .venv/bin/activate // Linux/MacOS
-.venv\Scripts\Activate.ps1 // Windows
-python -m pip install -r requirements.txt
+uv sync --locked
 ```
 
-Execute a API localmente:
+Execute a API localmente (os comandos abaixo partem de `backend/`):
 
 ```bash
-python -m uvicorn main:app --reload
+uv run --locked uvicorn main:app --reload
+```
+
+Verifique lint, formatação e tipos:
+
+```bash
+uv run --locked ruff check .
+uv run --locked ruff format --check .
+uv run --locked pyright
+```
+
+Para aplicar correções automáticas seguras de lint ou formatar o código, quando necessário:
+
+```bash
+uv run --locked ruff check --fix .
+uv run --locked ruff format .
+```
+
+Execute a suíte e gere um relatório de cobertura sem limite mínimo:
+
+```bash
+uv run --locked python -m pytest
+uv run --locked python -m pytest --cov=main --cov-report=term-missing
 ```
