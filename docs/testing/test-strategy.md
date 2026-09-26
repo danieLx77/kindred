@@ -376,22 +376,11 @@ Testes de segurança aprofundados não fazem parte do MVP, mas vulnerabilidades 
 
 ### Frontend
 
-O CI deverá executar:
-- lint;
-- verificação de tipos;
-- testes;
-- build;
-- formatação/check, conforme configuração adotada.
+O frontend já possui comandos de lint (`npm run lint`), build (`npm run build`) e formatação (`npm run format` e `npm run format:check`), documentados no README. O lint combina Oxlint, para as verificações rápidas que suporta, com ESLint como cobertura complementar; Oxfmt é o formatador. A execução em CI é uma etapa futura.
 
 ### Backend
 
-O CI deverá executar:
-- lint;
-- verificação de tipos, se adotada;
-- testes;
-- análise/formatação definida pela equipe.
-
-As ferramentas concretas serão escolhidas durante bootstrap e registradas quando arquiteturalmente relevantes.
+Ainda não há ferramentas nem comandos de lint, verificação de tipos, testes ou formatação configurados para o backend. Essas escolhas e sua automação permanecem pendentes.
 
 ## 14. Cobertura
 
@@ -434,15 +423,11 @@ Devem existir fixtures para:
 
 ### Local
 
-Desenvolvedores executam:
-- testes rápidos;
-- lint;
-- type checking;
-- testes de integração relevantes.
+Desenvolvedores executam as verificações atualmente disponíveis para o componente alterado. No frontend, os comandos existentes estão no README. A execução de testes automatizados e as verificações correspondentes do backend dependem da configuração dessas ferramentas.
 
 ### Pull Request
 
-CI executa obrigatoriamente os quality gates.
+Ainda não há pipeline de CI; os quality gates descritos nesta estratégia são objetivos para implementação futura, não checks obrigatórios dos Pull Requests atuais.
 
 ### Main
 
@@ -461,7 +446,7 @@ Antes ou imediatamente após release:
 
 ## 18. Quality Gates do Pull Request
 
-Um PR não deve estar elegível para merge se falhar em checks obrigatórios.
+Quando os quality gates forem implementados, um PR não deverá estar elegível para merge se falhar em checks obrigatórios. A lista abaixo é uma proposta futura:
 
 Proposta:
 

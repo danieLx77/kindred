@@ -33,8 +33,8 @@ Alterações relevantes devem ocorrer através de:
 2. branch;
 3. implementação;
 4. testes;
-5. Pull Request;
-6. CI;
+5. verificações locais;
+6. Pull Request;
 7. code review;
 8. merge.
 
@@ -77,7 +77,7 @@ Mudanças que afetem:
 
 devem atualizar a documentação correspondente quando necessário.
 
-## PC-05 — CI não substitui revisão humana
+## PC-05 — Automação não substitui revisão humana
 
 Automação valida regras objetivas.
 
@@ -102,15 +102,13 @@ Branch
   ↓
 Implementação
   ↓
-Testes locais
+Verificações locais
   ↓
 Commit(s)
   ↓
 Push
   ↓
 Pull Request
-  ↓
-CI
   ↓
 Code Review
   ↓
@@ -621,9 +619,20 @@ O objetivo do review é melhorar o produto e compartilhar conhecimento, não dem
 
 # 11. CI
 
-Todo Pull Request deverá passar pelos checks obrigatórios definidos na estratégia de testes.
+O repositório ainda não possui pipeline de CI. Antes de abrir um Pull Request, execute as verificações locais disponíveis no frontend:
 
-Conceitualmente:
+```bash
+cd frontend
+npm run lint
+npm run format:check
+npm run build
+```
+
+O lint executa Oxlint para as verificações rápidas que ele suporta e ESLint para complementar regras e plugins necessários. O Oxfmt é responsável pela formatação; use `npm run format` para aplicá-la quando `npm run format:check` apontar diferenças. Os comandos e a instalação estão no [README](../../README.md).
+
+Não há comandos de testes ou de qualidade configurados para o backend neste momento. Testes e CI permanecem objetivos futuros da estratégia de testes, mas ainda não são checks obrigatórios do Pull Request.
+
+Como objetivo futuro, os checks poderão cobrir frontend e backend:
 
 ```text
 Pull Request
@@ -643,9 +652,7 @@ build     integration
 Eligible for merge
 ```
 
-Falha em check obrigatório bloqueia o merge.
-
-Checks adicionais poderão ser adicionados conforme o projeto evoluir.
+Os checks obrigatórios e a política de bloqueio de merge deverão ser definidos quando o pipeline for implementado.
 
 ---
 
@@ -655,8 +662,7 @@ Configuração recomendada no GitHub:
 
 - exigir Pull Request antes do merge;
 - exigir pelo menos 1 aprovação;
-- exigir aprovação dos status checks;
-- impedir merge com CI falhando;
+- exigir aprovação dos status checks quando houver pipeline de CI;
 - exigir branch atualizada quando necessário;
 - impedir force push;
 - impedir exclusão da `main`.
@@ -727,8 +733,7 @@ Uma alteração será considerada concluída quando, conforme aplicável:
 - [ ] objetivo da issue foi atendido;
 - [ ] critérios de aceitação foram satisfeitos;
 - [ ] testes necessários foram adicionados/atualizados;
-- [ ] suíte obrigatória está verde;
-- [ ] lint/typecheck/build estão aprovados;
+- [ ] verificações locais disponíveis foram executadas;
 - [ ] estados de loading, erro e vazio foram considerados;
 - [ ] acessibilidade foi considerada;
 - [ ] responsividade foi considerada;
@@ -736,7 +741,7 @@ Uma alteração será considerada concluída quando, conforme aplicável:
 - [ ] documentação afetada foi atualizada;
 - [ ] não há segredo versionado;
 - [ ] code review foi concluído;
-- [ ] CI está aprovado;
+- [ ] checks de CI aprovados, quando implementados;
 - [ ] PR foi integrado via squash merge.
 
 ---
@@ -830,7 +835,7 @@ fix/...
  ↓
 PR
  ↓
-review + CI
+verificações locais + review
  ↓
 merge
 ```
@@ -847,7 +852,7 @@ PRs de dependências devem ser avaliados como qualquer alteração:
 
 - verificar changelog relevante;
 - avaliar breaking changes;
-- executar CI;
+- executar as verificações disponíveis;
 - evitar merge automático de mudanças de alto risco sem análise.
 
 Dependências de desenvolvimento poderão futuramente ser agrupadas quando isso reduzir ruído.
@@ -927,7 +932,7 @@ git push -u origin feature/nome-da-feature
 
 Depois:
 1. abrir Pull Request;
-2. aguardar CI;
+2. executar as verificações locais disponíveis;
 3. receber review;
 4. realizar ajustes;
 5. squash and merge;
