@@ -378,7 +378,7 @@ Testes de segurança aprofundados não fazem parte do MVP, mas vulnerabilidades 
 
 ### Frontend
 
-O frontend já possui comandos de lint (`npm run lint`), build (`npm run build`) e formatação (`npm run format` e `npm run format:check`), documentados no README. O lint combina Oxlint, para as verificações rápidas que suporta, com ESLint como cobertura complementar; Oxfmt é o formatador. A execução em CI é uma etapa futura.
+O frontend já possui comandos de lint (`npm run lint`), build (`npm run build`) e formatação (`npm run format` e `npm run format:check`), documentados no README. O lint combina Oxlint, para as verificações rápidas que suporta, com ESLint como cobertura complementar; Oxfmt é o formatador. A CI executa lint, verificação de formatação, build e testes em execução única para mudanças relevantes.
 
 ### Backend
 
@@ -429,7 +429,7 @@ Desenvolvedores executam as verificações disponíveis para o componente altera
 
 ### Pull Request
 
-Ainda não há pipeline de CI; os quality gates descritos nesta estratégia são objetivos para implementação futura, não checks obrigatórios dos Pull Requests atuais.
+A CI executa os quality gates locais aplicáveis em Pull Requests para `main`, sem acesso real à GlobalGiving. A escolha de checks obrigatórios de merge será feita separadamente, após validar a execução no GitHub.
 
 ### Main
 

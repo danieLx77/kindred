@@ -619,7 +619,7 @@ O objetivo do review é melhorar o produto e compartilhar conhecimento, não dem
 
 # 11. CI
 
-O repositório ainda não possui pipeline de CI. Antes de abrir um Pull Request, execute as verificações locais disponíveis para os componentes alterados.
+A CI do GitHub Actions executa em Pull Requests para `main` e em pushes para `main`. Ela usa os mesmos comandos locais e valida frontend e backend em jobs independentes, que podem rodar em paralelo. Mudanças em `frontend/` ou `backend/` acionam o respectivo job; mudanças nos workflows ou no `.gitignore` da raiz acionam ambos. Mudanças apenas documentais mantêm a CI ativa, mas dispensam as verificações pesadas. Antes de abrir um Pull Request, execute as verificações locais dos componentes alterados.
 
 ```bash
 cd frontend
@@ -631,9 +631,9 @@ npm run test:run
 
 O lint executa Oxlint para as verificações rápidas que ele suporta e ESLint para complementar regras e plugins necessários. O Oxfmt é responsável pela formatação; use `npm run format` para aplicá-la quando `npm run format:check` apontar diferenças. Os comandos e a instalação estão no [README](../../README.md).
 
-Para alterações no backend, sincronize o ambiente com `uv sync --locked` dentro de `backend/` e execute lint e formatação com Ruff, análise de tipos com Pyright, testes e cobertura antes do PR. Os comandos diretos estão no [README](../../README.md). Essas verificações são locais; ainda não há checks obrigatórios de CI para o backend.
+Para alterações no backend, sincronize o ambiente com `uv sync --locked` dentro de `backend/` e execute lint e formatação com Ruff, análise de tipos com Pyright e testes antes do PR. Os comandos diretos estão no [README](../../README.md). A cobertura continua informativa e não é um gate da CI.
 
-Como objetivo futuro, os checks poderão cobrir frontend e backend:
+Os jobs atuais verificam:
 
 ```text
 Pull Request
@@ -643,17 +643,17 @@ Pull Request
 Frontend Backend
  |         |
 lint      lint
-types     types
+format    format
+build     types
 tests     tests
-build     integration
  |         |
  +----+----+
       |
       v
-Eligible for merge
+Verificações concluídas
 ```
 
-Os checks obrigatórios e a política de bloqueio de merge deverão ser definidos quando o pipeline for implementado.
+Falhas nas verificações executadas fazem a CI falhar. A configuração de checks obrigatórios para merge ainda depende de validação do workflow no GitHub e de uma decisão separada sobre proteção da `main`. Se o número de componentes ou o tempo da CI crescer significativamente, estratégias adicionais de seleção de tarefas e cache poderão ser avaliadas.
 
 ---
 
@@ -663,7 +663,7 @@ Configuração recomendada no GitHub:
 
 - exigir Pull Request antes do merge;
 - exigir pelo menos 1 aprovação;
-- exigir aprovação dos status checks quando houver pipeline de CI;
+- avaliar a exigência dos status checks após validar a CI no GitHub;
 - exigir branch atualizada quando necessário;
 - impedir force push;
 - impedir exclusão da `main`.
