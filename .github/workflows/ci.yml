@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changed-paths:
+    name: changed-paths
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      frontend: ${{ steps.detect.outputs.frontend }}
+      backend: ${{ steps.detect.outputs.backend }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Detectar componentes afetados
+        id: detect
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: |
+          frontend=false
+          backend=false
+          base="$BASE_SHA"
+
+          if [[ -z "$base" || "$base" =~ ^0+$ ]] ||
+             ! git cat-file -e "$base^{commit}" ||
+             ! git cat-file -e "$HEAD_SHA^{commit}"; then
+            frontend=true
+            backend=true
+          else
+            if [[ "$EVENT_NAME" == pull_request ]]; then
+              if ! base="$(git merge-base "$base" "$HEAD_SHA")"; then
+                frontend=true
+                backend=true
+              fi
+            fi
+
+            if [[ "$frontend" == false ]]; then
+              if git diff --name-only --no-renames -z "$base" "$HEAD_SHA" > "$RUNNER_TEMP/ci-changed-paths"; then
+                while IFS= read -r -d '' path; do
+                  case "$path" in
+                    frontend/*) frontend=true ;;
+                    backend/*) backend=true ;;
+                    .github/workflows/*|.github/actions/*|.gitignore)
+                      frontend=true
+                      backend=true
+                      ;;
+                  esac
+                done < "$RUNNER_TEMP/ci-changed-paths"
+              else
+                frontend=true
+                backend=true
+              fi
+            fi
+          fi
+
+          echo "frontend=$frontend" >> "$GITHUB_OUTPUT"
+          echo "backend=$backend" >> "$GITHUB_OUTPUT"
+
+  quality-gates:
+    name: quality-gates
+    needs: changed-paths
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/quality-gates.yml
+    with:
+      frontend: ${{ needs.changed-paths.result != 'success' || needs.changed-paths.outputs.frontend == 'true' }}
+      backend: ${{ needs.changed-paths.result != 'success' || needs.changed-paths.outputs.backend == 'true' }}

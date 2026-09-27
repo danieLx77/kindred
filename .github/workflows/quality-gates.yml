@@ -1,0 +1,87 @@
+name: Quality gates
+
+on:
+  workflow_call:
+    inputs:
+      frontend:
+        required: true
+        type: boolean
+      backend:
+        required: true
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    name: frontend
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Sem alterações no frontend
+        if: ${{ !inputs.frontend }}
+        working-directory: .
+        run: echo 'Verificações do frontend dispensadas.'
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: ${{ inputs.frontend }}
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        if: ${{ inputs.frontend }}
+        with:
+          node-version: '22.20.0'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+        if: ${{ inputs.frontend }}
+      - run: npm run lint
+        if: ${{ inputs.frontend }}
+      - run: npm run format:check
+        if: ${{ inputs.frontend }}
+      - run: npm run build
+        if: ${{ inputs.frontend }}
+      - run: npm run test:run
+        if: ${{ inputs.frontend }}
+
+  backend:
+    name: backend
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Sem alterações no backend
+        if: ${{ !inputs.backend }}
+        working-directory: .
+        run: echo 'Verificações do backend dispensadas.'
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: ${{ inputs.backend }}
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        if: ${{ inputs.backend }}
+        with:
+          python-version: '3.13.3'
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        if: ${{ inputs.backend }}
+        with:
+          version: '0.12.19'
+          enable-cache: true
+          cache-dependency-glob: |
+            backend/pyproject.toml
+            backend/uv.lock
+      - run: uv sync --locked
+        if: ${{ inputs.backend }}
+      - run: uv run --locked ruff check .
+        if: ${{ inputs.backend }}
+      - run: uv run --locked ruff format --check .
+        if: ${{ inputs.backend }}
+      - run: uv run --locked pyright
+        if: ${{ inputs.backend }}
+      - run: uv run --locked python -m pytest
+        if: ${{ inputs.backend }}
