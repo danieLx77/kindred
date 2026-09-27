@@ -5,7 +5,7 @@ Aplicação web para descoberta de projetos sociais. O repositório contém um f
 ## Pré-requisitos
 
 - Node.js e npm;
-- Python 3.10 ou superior e [uv](https://docs.astral.sh/uv/getting-started/installation/) para o backend.
+- Para o backend: Python 3.10 ou superior e [uv](https://docs.astral.sh/uv/getting-started/installation/), ou Docker com BuildKit/Buildx.
 
 ## Frontend
 
@@ -73,3 +73,5 @@ Execute a suíte e gere um relatório de cobertura sem limite mínimo:
 uv run --locked python -m pytest
 uv run --locked python -m pytest --cov=main --cov-report=term-missing
 ```
+
+Para desenvolver o backend sem instalar Python e uv no host, use o ambiente Docker descrito no [workflow de contribuição](docs/contributing/workflow.md#backend-com-docker).

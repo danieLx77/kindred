@@ -119,6 +119,34 @@ Squash and Merge
 Delete branch
 ```
 
+### Backend com Docker
+
+O backend também pode ser desenvolvido somente com Docker, sem instalar Python, uv ou as ferramentas de teste no host. O build requer Docker com BuildKit/Buildx para o cache mount do uv. Na raiz do repositório, construa a imagem a partir do contexto `backend/`:
+
+```bash
+docker build -t kindred-backend:dev ./backend
+```
+
+Para iniciar o código copiado na imagem, sem montagem do diretório local:
+
+```bash
+docker run --rm -p 8000:8000 kindred-backend:dev
+```
+
+Para desenvolver com as alterações do host e recarga automática do Uvicorn:
+
+```bash
+docker run --rm -p 8000:8000 \
+  --mount "type=bind,src=$(pwd)/backend,dst=/app" \
+  --mount type=volume,dst=/app/.venv \
+  kindred-backend:dev \
+  uv run --locked uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+A API fica em `http://localhost:8000/` (porta 8000 do host para a porta 8000 do container). O volume separado mantém `/app/.venv` com as dependências Linux da imagem, mesmo quando o diretório `backend/` do host contém uma `.venv` própria. Mudanças em `pyproject.toml` ou `uv.lock` exigem reconstruir a imagem para atualizar a camada de dependências. O mesmo ambiente inclui pytest, Ruff e Pyright, instalados pelo `uv.lock`; o Node 22.20.0 da imagem oficial permite executar o Pyright sem baixar um runtime na inicialização. Os caches de Ruff e pytest ficam na home gravável do usuário do container, evitando permissões do bind mount. Os comandos locais do [README](../../README.md#backend) podem ser executados nele.
+
+A configuração atual atende ao desenvolvimento de um único serviço. Stages adicionais, composição de serviços ou configuração de runtime específica poderão ser avaliados quando houver uma necessidade concreta de desenvolvimento ou deployment.
+
 ---
 
 # 4. Issues
