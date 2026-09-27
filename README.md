@@ -27,6 +27,14 @@ npm run format:check
 
 Para aplicar a formatação, use `npm run format`.
 
+Para executar os testes em modo interativo, validar a suíte uma vez ou consultar a cobertura V8:
+
+```bash
+npm test
+npm run test:run
+npm run test:coverage
+```
+
 O lint executa Oxlint seguido de ESLint; o Oxlint cobre rapidamente as regras suportadas e o ESLint complementa a análise com regras e plugins adicionais. O Oxfmt formata os arquivos. São ferramentas recentes, adotadas para manter verificações locais rápidas sem perder cobertura necessária. Usuários do VS Code também recebem recomendações opcionais de extensão em `.vscode/extensions.json`.
 
 ## Backend

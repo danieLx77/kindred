@@ -626,6 +626,7 @@ cd frontend
 npm run lint
 npm run format:check
 npm run build
+npm run test:run
 ```
 
 O lint executa Oxlint para as verificações rápidas que ele suporta e ESLint para complementar regras e plugins necessários. O Oxfmt é responsável pela formatação; use `npm run format` para aplicá-la quando `npm run format:check` apontar diferenças. Os comandos e a instalação estão no [README](../../README.md).

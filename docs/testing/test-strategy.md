@@ -187,6 +187,8 @@ Um smoke/contract test externo poderá ser executado separadamente se for tecnic
 
 ## 6. Estratégia do frontend
 
+A fundação local utiliza Vitest com Happy DOM, React Testing Library, jest-dom e user-event para testes orientados ao usuário. O MSW controla respostas HTTP da Kindred API; a cobertura informativa usa V8. A execução em navegador real e a auditoria automatizada de acessibilidade serão definidas em etapas futuras.
+
 ### 6.1 Testes unitários
 
 Adequados para:
@@ -423,7 +425,7 @@ Devem existir fixtures para:
 
 ### Local
 
-Desenvolvedores executam as verificações disponíveis para o componente alterado. No frontend, os comandos existentes estão no README. No backend, lint, formatação, tipos, testes e cobertura são executados via uv conforme o README.
+Desenvolvedores executam as verificações disponíveis para o componente alterado. No frontend, lint, formatação, build e testes estão no README. No backend, lint, formatação, tipos, testes e cobertura são executados via uv conforme o README.
 
 ### Pull Request
 
@@ -581,13 +583,9 @@ O release do MVP exige:
 
 ## 26. Decisões ainda abertas
 
-Deverão ser escolhidos durante o bootstrap:
-- framework de testes frontend;
-- biblioteca de testes de componentes;
-- ferramenta de mock de rede;
+Permanecem em aberto:
 - framework E2E;
 - ferramentas de acessibilidade automatizada;
-- ferramentas de lint/type checking Python;
 - ferramenta de dependency/security scanning;
 - execução cross-browser no CI;
 - eventual teste de contrato contra GlobalGiving.
