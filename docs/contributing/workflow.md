@@ -875,7 +875,7 @@ A proteção da branch não deve ser ignorada por conveniência.
 
 # 21. Dependabot e dependências
 
-Atualizações automáticas poderão ser utilizadas.
+O Dependabot verifica semanalmente as GitHub Actions e as dependências npm do frontend e uv do backend, propondo atualizações por Pull Request.
 
 PRs de dependências devem ser avaliados como qualquer alteração:
 
