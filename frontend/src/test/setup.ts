@@ -1,13 +1,11 @@
-import "@testing-library/jest-dom/vitest";
-import { cleanup } from "@testing-library/react";
-import { afterAll, afterEach, beforeAll } from "vitest";
-import { server } from "./msw/server";
-
-beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
+import '@testing-library/jest-dom/vitest'
+import { cleanup } from '@testing-library/react'
+import { afterEach, vi } from 'vitest'
 
 afterEach(() => {
-  cleanup();
-  server.resetHandlers();
-});
-
-afterAll(() => server.close());
+  cleanup()
+  window.localStorage.clear()
+  document.documentElement.lang = ''
+  document.title = ''
+  vi.restoreAllMocks()
+})
