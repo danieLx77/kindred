@@ -4,7 +4,7 @@ Aplicação web para descoberta de projetos sociais. O repositório contém um f
 
 ## Pré-requisitos
 
-- Node.js e npm;
+- Node.js 26.11.1 e npm;
 - Para o backend: Python 3.10 ou superior e [uv](https://docs.astral.sh/uv/getting-started/installation/), ou Docker com BuildKit/Buildx.
 
 ## Frontend
