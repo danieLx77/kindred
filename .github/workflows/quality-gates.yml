@@ -30,7 +30,7 @@ jobs:
         if: ${{ inputs.frontend }}
         with:
           persist-credentials: false
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         if: ${{ inputs.frontend }}
         with:
           node-version: '26.11.1'
@@ -45,6 +45,8 @@ jobs:
       - run: npm run build
         if: ${{ inputs.frontend }}
       - run: npm run test:run
+        if: ${{ inputs.frontend }}
+      - run: npm run test:coverage
         if: ${{ inputs.frontend }}
 
   backend:
@@ -67,7 +69,7 @@ jobs:
         if: ${{ inputs.backend }}
         with:
           python-version: '3.13.3'
-      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         if: ${{ inputs.backend }}
         with:
           version: '0.12.19'
