@@ -46,6 +46,8 @@ jobs:
         if: ${{ inputs.frontend }}
       - run: npm run test:run
         if: ${{ inputs.frontend }}
+      - run: npm run test:coverage
+        if: ${{ inputs.frontend }}
 
   backend:
     name: backend
