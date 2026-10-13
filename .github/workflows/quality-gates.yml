@@ -85,3 +85,7 @@ jobs:
         if: ${{ inputs.backend }}
       - run: uv run --locked python -m pytest
         if: ${{ inputs.backend }}
+      - run: docker build --target base -t kindred-backend-base:ci .
+        if: ${{ inputs.backend }}
+      - run: docker run --rm kindred-backend-base:ci node --version
+        if: ${{ inputs.backend }}
