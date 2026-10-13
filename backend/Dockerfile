@@ -2,6 +2,10 @@
 
 FROM python:3.13.3-slim-bookworm AS base
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libatomic1 \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY --from=ghcr.io/astral-sh/uv:0.12.19 /uv /uvx /usr/local/bin/
 COPY --from=node:26.11.1-bookworm-slim /usr/local/bin/node /usr/local/bin/node
 
