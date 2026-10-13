@@ -3,7 +3,7 @@
 FROM python:3.13.3-slim-bookworm AS base
 
 COPY --from=ghcr.io/astral-sh/uv:0.12.19 /uv /uvx /usr/local/bin/
-COPY --from=node:22.20.0-bookworm-slim /usr/local/bin/node /usr/local/bin/node
+COPY --from=node:26.11.1-bookworm-slim /usr/local/bin/node /usr/local/bin/node
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
