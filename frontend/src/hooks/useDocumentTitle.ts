@@ -1,9 +1,9 @@
-import { useEffect } from 'react'
+import { useEffect } from "react";
 
-const SITE_NAME = 'Kindred'
+const SITE_NAME = "Kindred";
 
 export function useDocumentTitle(pageTitle: string) {
   useEffect(() => {
-    document.title = pageTitle ? `${pageTitle} · ${SITE_NAME}` : SITE_NAME
-  }, [pageTitle])
+    document.title = pageTitle ? `${pageTitle} · ${SITE_NAME}` : SITE_NAME;
+  }, [pageTitle]);
 }

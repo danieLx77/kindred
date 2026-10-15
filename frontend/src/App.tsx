@@ -1,10 +1,10 @@
-import { Route, Routes } from 'react-router-dom'
-import { AppShell } from './components/AppShell'
-import { ExplorePage } from './pages/ExplorePage'
-import { HomePage } from './pages/HomePage'
-import { NotFoundPage } from './pages/NotFoundPage'
-import { ProjectDetailPage } from './pages/ProjectDetailPage'
-import { paths } from './routes'
+import { Route, Routes } from "react-router-dom";
+import { AppShell } from "./components/AppShell";
+import { ExplorePage } from "./pages/ExplorePage";
+import { HomePage } from "./pages/HomePage";
+import { NotFoundPage } from "./pages/NotFoundPage";
+import { ProjectDetailPage } from "./pages/ProjectDetailPage";
+import { paths } from "./routes";
 
 function App() {
   return (
@@ -16,7 +16,7 @@ function App() {
         <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>
-  )
+  );
 }
 
-export default App
+export default App;
