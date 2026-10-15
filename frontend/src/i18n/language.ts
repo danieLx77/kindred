@@ -27,6 +27,7 @@ export function storeLanguage(language: Language): void {
   try {
     window.localStorage.setItem(LANGUAGE_STORAGE_KEY, language)
   } catch {
+    // Ignore storage write errors (e.g. private browsing limits)
   }
 }
 
