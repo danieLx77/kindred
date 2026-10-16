@@ -1,5 +1,8 @@
+/// <reference types="node" />
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import css from "./index.css?raw";
+
+const css = readFileSync("src/index.css", "utf8");
 
 function readTokens(source: string): Record<string, string> {
   const root = source.match(/:root\s*\{([\s\S]*?)\n\}/)?.[1] ?? "";
@@ -67,8 +70,8 @@ describe("tema verde e branco", () => {
   });
 
   it("declara a fonte do corpo e dos títulos com alternativas do sistema", () => {
-    expect(css).toMatch(/--font-body:[^;]*'Figtree Variable'[^;]*system-ui/);
-    expect(css).toMatch(/--font-display:[^;]*'Young Serif'[^;]*serif/);
+    expect(css).toMatch(/--font-body:[^;]*Figtree Variable[^;]*system-ui/);
+    expect(css).toMatch(/--font-display:[^;]*Young Serif[^;]*serif/);
   });
 
   it("não define modo escuro (a identidade é clara)", () => {

@@ -1,6 +1,9 @@
+/// <reference types="node" />
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import indexHtml from "../index.html?raw";
-import css from "./index.css?raw";
+
+const css = readFileSync("src/index.css", "utf8");
 
 describe("contrato de estilos (acessibilidade e responsividade)", () => {
   it("define um indicador de foco visível para elementos interativos", () => {
