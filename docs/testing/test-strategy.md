@@ -115,6 +115,11 @@ Devem validar principalmente:
 
 Exemplo conceitual:
 
+O cálculo financeiro abaixo depende da confirmação de moeda/unidade. No M1,
+RF-12/CA-07 permanecem pendentes, conforme o
+[contrato de projetos](../architecture/project-provider-contract.md#lacuna-rf-12--ca-07);
+não se calcula nem se exibe percentual a partir dos dados ainda não confirmados.
+
 ```text
 Given:
 funding = 250
@@ -128,6 +133,11 @@ progress = 25%
 ```
 
 ### 5.2 Test doubles
+
+O primeiro double implementado é `projects.fake.FakeProjectProvider`, com testes
+em `backend/tests/unit/test_projects.py`. Ele cobre descoberta, consulta por ID,
+dados parciais e continuação sem serviço externo; simulação de timeout/erro de
+integração permanece para o adapter e os casos de uso correspondentes.
 
 Casos de uso deverão poder utilizar um provider falso:
 
