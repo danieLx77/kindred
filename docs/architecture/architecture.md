@@ -359,6 +359,11 @@ Frontend
 
 ## 11. Paginação
 
+A primeira fronteira interna implementada está descrita em
+[Modelos de projetos e contrato de descoberta](project-provider-contract.md).
+Ela usa continuação opaca sem total exato. O exemplo HTTP abaixo permanece
+conceitual; a issue #10 não define rotas públicas nem conversão para páginas.
+
 A paginação exposta pelo Kindred deverá utilizar uma abstração amigável ao frontend.
 
 Exemplo:
