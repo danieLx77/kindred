@@ -73,8 +73,8 @@ uv run --locked ruff format .
 `discover` do contrato de projetos da #10. O provider completo é
 `integrations.globalgiving.GlobalGivingProjectProvider`, que também implementa
 a consulta detalhada da #13 com o mesmo cliente HTTP.
-Não há novas rotas públicas. Use uma instância por ciclo de vida da aplicação,
-com `async with` ou fechamento explícito por `aclose()`.
+A API da #15 reutiliza uma instância por ciclo de vida da aplicação e
+fecha o cliente ao encerrar o FastAPI.
 
 A chave vem exclusivamente de `GLOBALGIVING_API_KEY` no ambiente do backend;
 o adapter não lê `.env` automaticamente. A URL base padrão é HTTPS, o timeout
@@ -95,13 +95,14 @@ As continuações são estado interno assinado, vinculado à consulta e à inst�
 sem armazenamento de páginas. Permitem replay enquanto a instância existir;
 reinício ou outra instância invalida o handle. A assinatura impede adulteração,
 mas não é criptografia: esses tokens internos não devem ser publicados diretamente
-pela futura API #15. Filtros de tema/país ainda são rejeitados explicitamente.
+pela API pública. Filtros de tema/país ainda são rejeitados explicitamente.
 
 A #10 deixou categorias de falhas para a integração. A decisão nesta entrega é
 usar `projects.errors.ProviderError` com `ProviderFailure`: entrada inválida,
 autenticação, recurso ausente, indisponibilidade, limite de taxa, timeout, rede
 ou resposta inválida. Não carrega URL, corpo ou exceção bruta. Um 404 de descoberta
-é falha da operação, não uma lista vazia. A tradução em HTTP público fica na #15.
+é falha da operação, não uma lista vazia. A rota pública da #15 traduz essas
+categorias em códigos HTTP.
 Campos opcionais inválidos são omitidos; ID de projeto inválido rejeita o lote.
 Organização sem ID utilizável não gera referência fictícia.
 
@@ -113,6 +114,14 @@ falhas externas mantêm as categorias de erro da integração. Campos opcionais
 sem dados utilizáveis são omitidos. O link oficial vem de `projectLink`, e a
 imagem vem de `imageLink` ou de uma variante válida presente no detalhe. O
 adapter não consulta a galeria nem interpreta os valores financeiros do provedor.
+
+### API de descoberta (issue #15)
+
+`GET /api/v1/projects` lista projetos e `GET /api/v1/projects?q=education`
+faz pesquisa textual. Consulte `/docs` e o
+[contrato de paginação e erros](docs/architecture/architecture.md#11-paginação).
+Configure `GLOBALGIVING_API_KEY` no ambiente do backend. Sem a chave, a
+descoberta retorna 503 e a rota raiz continua disponível.
 
 Os testes de integração usam RESPX com requisições não previstas bloqueadas,
 transportes locais e uma chave fictícia. Não exigem acesso real à GlobalGiving.

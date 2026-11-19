@@ -84,7 +84,7 @@ class GlobalGivingDiscoveryAdapter:
                 raise invalid_response()
             if flag in (True, "true"):
                 next_position = integer(container.get("nextProjectId"), minimum=1)
-                if next_position == position:
+                if position is not None and next_position <= position:
                     raise invalid_response()
 
         projects = summaries(container)
