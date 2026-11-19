@@ -17,6 +17,7 @@ const ptBR = {
   },
   footer: {
     copyright: "© {{year}} Kindred",
+    dataSource: "Fonte dos dados de projetos",
     externalContent:
       "O conteúdo de projetos e organizações vem de fontes externas e é exibido no idioma original.",
   },
@@ -28,9 +29,14 @@ const ptBR = {
   },
   home: {
     title: "Início",
-    heading: "Bem-vindo à Kindred",
-    lead: "Descubra projetos de impacto social e apoie as causas que importam para você.",
+    heading: "Descubra projetos de impacto social",
+    lead: "O Kindred ajuda você a encontrar iniciativas sociais e conhecer o trabalho que elas realizam.",
     cta: "Explorar projetos",
+    searchLabel: "Pesquisar projetos sociais",
+    searchSubmit: "Pesquisar",
+    guideHeading: "Da descoberta à página oficial do projeto",
+    guideDescription:
+      "Comece pela área Explorar ou digite um termo de busca. Quando houver uma página oficial do projeto, siga o link para saber mais diretamente com a iniciativa.",
   },
   explore: {
     title: "Explorar",

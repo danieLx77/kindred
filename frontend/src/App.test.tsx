@@ -7,7 +7,7 @@ describe("App", () => {
     renderApp({ language: "pt-BR" });
 
     expect(
-      screen.getByRole("heading", { level: 1, name: "Bem-vindo à Kindred" }),
+      screen.getByRole("heading", { level: 1, name: "Descubra projetos de impacto social" }),
     ).toBeInTheDocument();
 
     expect(screen.queryByText(/vite \+ react/i)).not.toBeInTheDocument();

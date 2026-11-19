@@ -55,7 +55,6 @@ body {
 body {
   background: var(--color-bg);
   color: var(--color-text);
-  overflow-x: hidden;
 }
 
 img,
@@ -378,6 +377,51 @@ a {
   --mark-lens: #81c784;
   width: 100%;
   height: 100%;
+}
+
+.home-search {
+  max-width: 31rem;
+  margin-top: var(--space-4);
+}
+
+.home-search label {
+  display: block;
+  margin-bottom: var(--space-2);
+  font-weight: 700;
+}
+
+.home-search__controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.home-search__controls input {
+  flex: 1 1 12rem;
+  min-width: 0;
+  width: 100%;
+  min-height: var(--tap-target);
+  padding: var(--space-2) var(--control-pad);
+  border: 2px solid var(--color-primary);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font: inherit;
+}
+
+.home-guide {
+  max-width: var(--reading-width);
+  margin-top: var(--space-5);
+}
+
+.home-guide h2 {
+  margin: 0 0 var(--space-3);
+  font-size: clamp(1.4rem, 1.2rem + 1vw, 2rem);
+}
+
+.home-guide p {
+  margin-bottom: 0;
+  color: var(--color-muted);
 }
 
 .state-message {
