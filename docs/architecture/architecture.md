@@ -295,6 +295,22 @@ GET /api/v1/projects?q=education&page_size=10
 
 O contrato do Kindred não precisa reproduzir os parâmetros ou formatos internos da GlobalGiving.
 
+### Detalhe de projeto
+
+`GET /api/v1/projects/{project_id}` retorna os campos do card de descoberta
+e acrescenta `need`, `activities`, `long_term_impact`, `region` e
+`official_url`. O link oficial é um destino externo. Campos opcionais
+indisponíveis retornam nulos. O contrato financeiro RF-12/CA-07 segue pendente.
+
+O ID é uma sequência decimal positiva de até 20 dígitos ASCII. Zeros à
+esquerda são aceitos, e o ID na resposta usa a representação canônica.
+A URL sem o segmento de ID corresponde à descoberta. Um ID inválido
+retorna `422 invalid_request` antes de consultar o provedor. Projeto
+inexistente retorna `404 project_not_found`. Uma divergência entre os IDs
+solicitado e retornado resulta em `502 provider_failure`.
+As demais falhas seguem os códigos compartilhados com a descoberta.
+Os schemas de ambas as operações estão em `/openapi.json` e `/docs`.
+
 ## 9. Anti-Corruption Layer
 
 A integração com GlobalGiving deverá funcionar como uma camada de proteção entre os modelos externos e o domínio.

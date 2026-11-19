@@ -115,6 +115,11 @@ sem dados utilizáveis são omitidos. O link oficial vem de `projectLink`, e a
 imagem vem de `imageLink` ou de uma variante válida presente no detalhe. O
 adapter não consulta a galeria nem interpreta os valores financeiros do provedor.
 
+A API da #16 expõe `GET /api/v1/projects/{project_id}`. O detalhe usa o
+mesmo cliente da descoberta e retorna 404 para projeto inexistente.
+Consulte `/docs` e o
+[contrato de detalhe](docs/architecture/architecture.md#detalhe-de-projeto).
+
 ### API de descoberta (issue #15)
 
 `GET /api/v1/projects` lista projetos e `GET /api/v1/projects?q=education`
