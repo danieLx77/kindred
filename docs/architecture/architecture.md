@@ -287,10 +287,10 @@ GET /api/v1/regions
 GET /api/v1/health
 ```
 
-Exemplo de pesquisa:
+A rota de descoberta está implementada na #15. Exemplo de pesquisa:
 
 ```text
-GET /api/v1/projects?q=education&theme=edu&country=BR&page=2
+GET /api/v1/projects?q=education&page_size=10
 ```
 
 O contrato do Kindred não precisa reproduzir os parâmetros ou formatos internos da GlobalGiving.
@@ -359,27 +359,58 @@ Frontend
 
 ## 11. Paginação
 
-A primeira fronteira interna implementada está descrita em
-[Modelos de projetos e contrato de descoberta](project-provider-contract.md).
-Ela usa continuação opaca sem total exato. O exemplo HTTP abaixo permanece
-conceitual; a issue #10 não define rotas públicas nem conversão para páginas.
+A rota `GET /api/v1/projects` lista o catálogo quando `q` está ausente ou em
+branco. A busca recebe até 200 caracteres e normaliza espaços. O parâmetro
+`page_size` limita o lote a 1–10 itens (padrão 10). A busca depende dos campos
+que o provedor indexa. O contrato está disponível em `/openapi.json` e `/docs`.
 
-A paginação exposta pelo Kindred deverá utilizar uma abstração amigável ao frontend.
-
-Exemplo:
+Uma busca sem resultados retorna HTTP 200:
 
 ```json
 {
   "items": [],
   "pagination": {
-    "page": 2,
-    "pageSize": 10,
-    "hasNext": true
+    "page": 1,
+    "page_size": 10,
+    "next_cursor": null
   }
 }
 ```
 
-O adapter será responsável por converter esse modelo para o mecanismo utilizado pelo provedor externo.
+Os cards contêm ID e, quando disponíveis, título, resumo, URL de imagem,
+tema, país e referência de organização (ID e nome). Campos ausentes são
+nulos.
+
+Para avançar, envie `next_cursor` como `cursor` com o mesmo texto normalizado
+e tamanho de lote. O Explore (#17) guarda os cursores públicos usados em cada
+posição e reapresenta o anterior para voltar. A primeira página é
+representada pela ausência de cursor. Ao mudar texto ou tamanho de lote,
+reinicie a navegação. A posição é relativa à sequência percorrida e o
+retorno a uma página consulta novamente o catálogo, que pode ter mudado.
+
+O [contrato de descoberta](project-provider-contract.md) fornece a
+continuação interna. A API a encapsula com criptografia autenticada, vinculada
+à consulta. Cada ciclo de vida da aplicação gera sua chave de cursor.
+Reinícios ou requisições encaminhadas para outro processo exigem reiniciar
+a navegação. Para manter a validade dos cursores no MVP, execute uma única
+instância com um único worker. O servidor não mantém histórico de navegação.
+
+O valor nulo encerra a navegação. Na pesquisa, um lote com itens pode
+ter continuação mesmo quando já contém o último resultado. A próxima
+requisição pode retornar um lote vazio, sem nova continuação. O Kindred
+não faz chamadas antecipadas nem informa total de itens ou páginas.
+
+Os erros retornam um objeto com o campo `code`:
+
+| HTTP | Código | Motivo |
+| --- | --- | --- |
+| 400 | `invalid_cursor` | Cursor inválido, de outra consulta ou de um ciclo de vida anterior |
+| 422 | `invalid_request` | Parâmetros inválidos |
+| 500 | `internal_error` | Falha inesperada na API |
+| 502 | `provider_failure` | Falha de transporte, resposta inválida ou operação rejeitada pelo provedor |
+| 503 | `provider_unavailable` | Provedor indisponível ou credenciais ausentes ou inválidas |
+| 503 | `provider_rate_limited` | Limite de requisições do provedor |
+| 504 | `provider_timeout` | Prazo de resposta do provedor excedido |
 
 ## 12. Internacionalização
 
