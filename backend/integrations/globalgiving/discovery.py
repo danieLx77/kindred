@@ -7,6 +7,7 @@ import json
 import os
 import secrets
 from types import TracebackType
+from typing import TypeVar
 
 import httpx
 
@@ -14,6 +15,8 @@ from projects.models import Continuation, DiscoveryQuery, DiscoveryResult
 
 from .http import GlobalGivingHTTP
 from .mapping import integer, invalid_response, object_value, summaries
+
+_DiscoveryAdapterT = TypeVar("_DiscoveryAdapterT", bound="GlobalGivingDiscoveryAdapter")
 
 
 class GlobalGivingDiscoveryAdapter:
@@ -151,7 +154,7 @@ class GlobalGivingDiscoveryAdapter:
     async def aclose(self) -> None:
         await self._http.aclose()
 
-    async def __aenter__(self) -> "GlobalGivingDiscoveryAdapter":
+    async def __aenter__(self: _DiscoveryAdapterT) -> _DiscoveryAdapterT:
         return self
 
     async def __aexit__(

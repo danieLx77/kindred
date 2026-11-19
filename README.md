@@ -70,8 +70,9 @@ uv run --locked ruff format .
 ### Descoberta GlobalGiving (issue #12)
 
 `integrations.globalgiving.GlobalGivingDiscoveryAdapter` implementa a operação
-`discover` do contrato de projetos da #10. A consulta de detalhe (`get_project`)
-permanece na #13; este componente ainda não é o `ProjectProvider` completo.
+`discover` do contrato de projetos da #10. O provider completo é
+`integrations.globalgiving.GlobalGivingProjectProvider`, que também implementa
+a consulta detalhada da #13 com o mesmo cliente HTTP.
 Não há novas rotas públicas. Use uma instância por ciclo de vida da aplicação,
 com `async with` ou fechamento explícito por `aclose()`.
 
@@ -103,6 +104,15 @@ ou resposta inválida. Não carrega URL, corpo ou exceção bruta. Um 404 de des
 é falha da operação, não uma lista vazia. A tradução em HTTP público fica na #15.
 Campos opcionais inválidos são omitidos; ID de projeto inválido rejeita o lote.
 Organização sem ID utilizável não gera referência fictícia.
+
+### Detalhe GlobalGiving (issue #13)
+
+`get_project(id)` recebe um ID textual numérico positivo, consulta diretamente
+o projeto e retorna `ProjectDetail`. Um 404 retorna `None`; 410, timeout e outras
+falhas externas mantêm as categorias de erro da integração. Campos opcionais
+sem dados utilizáveis são omitidos. O link oficial vem de `projectLink`, e a
+imagem vem de `imageLink` ou de uma variante válida presente no detalhe. O
+adapter não consulta a galeria nem interpreta os valores financeiros do provedor.
 
 Os testes de integração usam RESPX com requisições não previstas bloqueadas,
 transportes locais e uma chave fictícia. Não exigem acesso real à GlobalGiving.
