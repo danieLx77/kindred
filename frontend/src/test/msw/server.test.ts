@@ -1,11 +1,12 @@
-import { http, HttpResponse } from "msw";
+import { http, HttpResponse } from "msw/http";
 import { expect, test } from "vitest";
 import { server } from "./server";
 
 test("simula a resposta da rota raiz da Kindred API", async () => {
-  server.use(http.get("http://kindred.test/", () => HttpResponse.json({ status: "ok" })));
+  const url = new URL("/", window.location.href).href;
+  server.use(http.get(url, () => HttpResponse.json({ status: "ok" })));
 
-  const response = await fetch("http://kindred.test/");
+  const response = await fetch(url);
 
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({ status: "ok" });
