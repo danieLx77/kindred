@@ -19,6 +19,7 @@ const en: Translation = {
   },
   footer: {
     copyright: "© {{year}} Kindred",
+    dataSource: "Project data source",
     externalContent:
       "Project and organization content comes from external sources and is shown in its original language.",
   },
@@ -30,9 +31,14 @@ const en: Translation = {
   },
   home: {
     title: "Home",
-    heading: "Welcome to Kindred",
-    lead: "Discover social impact projects and support the causes that matter to you.",
+    heading: "Discover social impact projects",
+    lead: "Kindred helps you find social initiatives and learn about the work they do.",
     cta: "Explore projects",
+    searchLabel: "Search social projects",
+    searchSubmit: "Search",
+    guideHeading: "From discovery to the official project page",
+    guideDescription:
+      "Start in Explore or enter a search term. When an official project page is available, follow its link to learn more directly from the initiative.",
   },
   explore: {
     title: "Explore",

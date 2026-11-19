@@ -64,6 +64,9 @@ export function AppShell() {
         <div className="app-footer__inner">
           <p>{t("footer.copyright", { year: CURRENT_YEAR })}</p>
           <p>{t("footer.externalContent")}</p>
+          <p>
+            {t("footer.dataSource")}: <a href="https://www.globalgiving.org/">GlobalGiving</a>
+          </p>
         </div>
       </footer>
     </div>

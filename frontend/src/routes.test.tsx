@@ -11,7 +11,7 @@ describe("rotas", () => {
   it("renderiza cada rota conhecida", () => {
     const { unmount } = renderApp({ route: "/", language: "pt-BR" });
     expect(
-      screen.getByRole("heading", { level: 1, name: "Bem-vindo à Kindred" }),
+      screen.getByRole("heading", { level: 1, name: "Descubra projetos de impacto social" }),
     ).toBeInTheDocument();
     unmount();
 
@@ -61,7 +61,7 @@ describe("rotas", () => {
     await user.click(screen.getByRole("link", { name: "Voltar para o início" }));
 
     expect(
-      screen.getByRole("heading", { level: 1, name: "Bem-vindo à Kindred" }),
+      screen.getByRole("heading", { level: 1, name: "Descubra projetos de impacto social" }),
     ).toBeInTheDocument();
   });
 });
@@ -84,7 +84,7 @@ describe("navegação", () => {
     await user.click(nav.getByRole("link", { name: "Início" }));
 
     expect(
-      screen.getByRole("heading", { level: 1, name: "Bem-vindo à Kindred" }),
+      screen.getByRole("heading", { level: 1, name: "Descubra projetos de impacto social" }),
     ).toBeInTheDocument();
   });
 

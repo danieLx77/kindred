@@ -60,7 +60,7 @@ describe("seletor de idioma", () => {
     await user.click(languageGroup("Language").getByRole("button", { name: "Português" }));
 
     expect(
-      screen.getByRole("heading", { level: 1, name: "Bem-vindo à Kindred" }),
+      screen.getByRole("heading", { level: 1, name: "Descubra projetos de impacto social" }),
     ).toBeInTheDocument();
     expect(document.documentElement.lang).toBe("pt-BR");
   });
@@ -109,7 +109,7 @@ describe("persistência do idioma", () => {
     renderApp();
 
     expect(
-      screen.getByRole("heading", { level: 1, name: "Welcome to Kindred" }),
+      screen.getByRole("heading", { level: 1, name: "Discover social impact projects" }),
     ).toBeInTheDocument();
     expect(document.documentElement.lang).toBe("en");
   });
@@ -121,7 +121,7 @@ describe("persistência do idioma", () => {
     renderApp();
 
     expect(
-      screen.getByRole("heading", { level: 1, name: "Welcome to Kindred" }),
+      screen.getByRole("heading", { level: 1, name: "Discover social impact projects" }),
     ).toBeInTheDocument();
   });
 
@@ -131,7 +131,7 @@ describe("persistência do idioma", () => {
     renderApp();
 
     expect(
-      screen.getByRole("heading", { level: 1, name: "Bem-vindo à Kindred" }),
+      screen.getByRole("heading", { level: 1, name: "Descubra projetos de impacto social" }),
     ).toBeInTheDocument();
   });
 
@@ -141,7 +141,7 @@ describe("persistência do idioma", () => {
     renderApp();
 
     expect(
-      screen.getByRole("heading", { level: 1, name: "Welcome to Kindred" }),
+      screen.getByRole("heading", { level: 1, name: "Discover social impact projects" }),
     ).toBeInTheDocument();
   });
 
@@ -152,7 +152,7 @@ describe("persistência do idioma", () => {
     renderApp();
 
     expect(
-      screen.getByRole("heading", { level: 1, name: "Bem-vindo à Kindred" }),
+      screen.getByRole("heading", { level: 1, name: "Descubra projetos de impacto social" }),
     ).toBeInTheDocument();
   });
 
@@ -168,7 +168,7 @@ describe("persistência do idioma", () => {
     await user.click(languageGroup("Idioma").getByRole("button", { name: "English" }));
 
     expect(
-      screen.getByRole("heading", { level: 1, name: "Welcome to Kindred" }),
+      screen.getByRole("heading", { level: 1, name: "Discover social impact projects" }),
     ).toBeInTheDocument();
   });
 });

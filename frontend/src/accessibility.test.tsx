@@ -113,7 +113,7 @@ describe("navegação por teclado", () => {
     await user.keyboard("{Enter}");
 
     expect(
-      screen.getByRole("heading", { level: 1, name: "Welcome to Kindred" }),
+      screen.getByRole("heading", { level: 1, name: "Discover social impact projects" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "English" })).toHaveFocus();
   });
@@ -132,7 +132,7 @@ describe("navegação por teclado", () => {
       "true",
     );
     expect(
-      screen.getByRole("heading", { level: 1, name: "Bem-vindo à Kindred" }),
+      screen.getByRole("heading", { level: 1, name: "Descubra projetos de impacto social" }),
     ).toBeInTheDocument();
   });
 
