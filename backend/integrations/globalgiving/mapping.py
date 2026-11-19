@@ -1,11 +1,12 @@
-"""Only external summary data needed by Kindred crosses this boundary."""
+"""Only external project data needed by Kindred crosses this boundary."""
 
 import re
+from dataclasses import replace
 from typing import cast
-from urllib.parse import urlsplit
+from urllib.parse import parse_qsl, urlsplit
 
 from projects.errors import ProviderError, ProviderFailure
-from projects.models import OrganizationReference, ProjectSummary
+from projects.models import OrganizationReference, ProjectDetail, ProjectSummary
 
 
 def invalid_response() -> ProviderError:
@@ -32,7 +33,9 @@ def text(value: object) -> str | None:
 
 def safe_url(value: object) -> str | None:
     candidate = text(value)
-    if candidate is None or any(char.isspace() for char in candidate):
+    if candidate is None or any(
+        char.isspace() or ord(char) < 32 or char == "\\" for char in candidate
+    ):
         return None
     try:
         parsed = urlsplit(candidate)
@@ -41,6 +44,7 @@ def safe_url(value: object) -> str | None:
             or not parsed.hostname
             or parsed.username is not None
             or parsed.password is not None
+            or any(key.lower() == "api_key" for key, _ in parse_qsl(parsed.query))
         ):
             return None
         parsed.port  # Reject malformed ports without exposing the supplied URL.
@@ -89,3 +93,36 @@ def summaries(container: dict[str, object]) -> tuple[ProjectSummary, ...]:
     if len({project.id for project in result}) != len(result):
         raise invalid_response()
     return result
+
+
+def _image_variant(value: object) -> str | None:
+    if not isinstance(value, dict):
+        return None
+    links = object_value(value).get("imagelink")
+    if isinstance(links, dict):
+        links = [links]
+    if not isinstance(links, list):
+        return None
+    for link in links:
+        if isinstance(link, dict):
+            url = safe_url(object_value(link).get("url"))
+            if url is not None:
+                return url
+    return None
+
+
+def detail(value: object, project_id: str) -> ProjectDetail:
+    data = object_value(object_value(value).get("project"))
+    project = summary(data)
+    if project.id != project_id:
+        raise invalid_response()
+    if project.image_url is None:
+        project = replace(project, image_url=_image_variant(data.get("image")))
+    return ProjectDetail(
+        project=project,
+        need=text(data.get("need")),
+        activities=text(data.get("activities")),
+        long_term_impact=text(data.get("longTermImpact")),
+        region=text(data.get("region")),
+        official_url=safe_url(data.get("projectLink")),
+    )
