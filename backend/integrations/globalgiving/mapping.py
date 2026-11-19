@@ -3,10 +3,10 @@
 import re
 from dataclasses import replace
 from typing import cast
-from urllib.parse import parse_qsl, urlsplit
 
 from projects.errors import ProviderError, ProviderFailure
 from projects.models import OrganizationReference, ProjectDetail, ProjectSummary
+from projects.urls import safe_url
 
 
 def invalid_response() -> ProviderError:
@@ -29,28 +29,6 @@ def integer(value: object, *, minimum: int = 0) -> int:
 
 def text(value: object) -> str | None:
     return value.strip() or None if isinstance(value, str) else None
-
-
-def safe_url(value: object) -> str | None:
-    candidate = text(value)
-    if candidate is None or any(
-        char.isspace() or ord(char) < 32 or char == "\\" for char in candidate
-    ):
-        return None
-    try:
-        parsed = urlsplit(candidate)
-        if (
-            parsed.scheme not in ("https", "http")
-            or not parsed.hostname
-            or parsed.username is not None
-            or parsed.password is not None
-            or any(key.lower() == "api_key" for key, _ in parse_qsl(parsed.query))
-        ):
-            return None
-        parsed.port  # Reject malformed ports without exposing the supplied URL.
-    except ValueError:
-        return None
-    return candidate
 
 
 def summary(value: object) -> ProjectSummary:

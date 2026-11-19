@@ -4,8 +4,10 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from api.discovery import DiscoveryServices, router
+from api.detail import router as detail_router
+from api.discovery import router as discovery_router
 from api.discovery_cursor import DiscoveryCursors
+from api.project_common import ProjectServices
 from integrations.globalgiving import GlobalGivingProjectProvider
 from projects.provider import ProjectProvider
 
@@ -19,16 +21,17 @@ def create_app(provider: ProjectProvider | None = None) -> FastAPI:
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         cursors = DiscoveryCursors()
         if provider is not None or not os.getenv("GLOBALGIVING_API_KEY", "").strip():
-            app.state.discovery = DiscoveryServices(provider, cursors)
+            app.state.projects = ProjectServices(provider, cursors)
             yield
             return
 
         async with GlobalGivingProjectProvider() as globalgiving:
-            app.state.discovery = DiscoveryServices(globalgiving, cursors)
+            app.state.projects = ProjectServices(globalgiving, cursors)
             yield
 
     app = FastAPI(lifespan=lifespan)
-    app.include_router(router)
+    app.include_router(discovery_router)
+    app.include_router(detail_router)
 
     app.add_api_route("/", read_root, methods=["GET"])
 
