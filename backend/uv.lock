@@ -521,6 +521,7 @@ dependencies = [
     { name = "cryptography" },
     { name = "fastapi" },
     { name = "httpx" },
+    { name = "python-dotenv" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
@@ -539,6 +540,7 @@ requires-dist = [
     { name = "cryptography", specifier = ">=43,<49" },
     { name = "fastapi", specifier = "==0.162.5" },
     { name = "httpx", specifier = "==0.28.1" },
+    { name = "python-dotenv", specifier = "==1.2.3" },
     { name = "uvicorn", extras = ["standard"], specifier = "==0.54.0" },
 ]
 
