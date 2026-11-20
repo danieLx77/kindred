@@ -1,4 +1,4 @@
-import { fireEvent, screen, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { http, HttpResponse } from "msw/http";
 import { useLocation, useNavigate } from "react-router-dom";
 import { describe, expect, it } from "vitest";
@@ -71,7 +71,7 @@ describe("Project Detail", () => {
     gate.release();
     const title = await screen.findByRole("heading", { name: full.title, level: 1 });
     expect(title).toBeInTheDocument();
-    expect(document.title).toBe("Learning for all · Kindred");
+    await waitFor(() => expect(document.title).toBe("Learning for all · Kindred"));
     for (const text of [
       full.summary,
       full.theme,
