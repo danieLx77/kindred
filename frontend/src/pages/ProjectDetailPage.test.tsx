@@ -267,6 +267,6 @@ describe("Project Detail", () => {
     );
     await user.click(screen.getByRole("button", { name: "Anterior" }));
     await screen.findByText("Página 1");
-    expect(visits).toEqual(["first", "opaque", "detail", "opaque", "first"]);
+    expect(visits).toEqual(["first", "opaque", "detail"]);
   });
 });

@@ -1,5 +1,5 @@
 export const discoveryPath = "/api/v1/projects";
-const explorePageSize = 9;
+export const explorePageSize = 9;
 
 interface OrganizationCard {
   id: string;
@@ -24,7 +24,7 @@ export interface ProjectDetail extends ProjectCard {
   official_url?: string | null;
 }
 
-interface DiscoveryResponse {
+export interface DiscoveryResponse {
   items: ProjectCard[];
   pagination: { page: number; page_size: number; next_cursor: string | null };
 }

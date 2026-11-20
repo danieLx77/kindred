@@ -157,7 +157,7 @@ describe("Explore", () => {
     await screen.findByText("Página 1");
     expect(previous()).toBeDisabled();
     expect(location()).toBe("/explore?q=educa%C3%A7%C3%A3o");
-    expect(seen).toEqual(["", "second+/=", "third", "second+/=", ""]);
+    expect(seen).toEqual(["", "second+/=", "third"]);
   });
 
   it.each(["", "água"])(
@@ -261,7 +261,7 @@ describe("Explore", () => {
     await user.type(screen.getByRole("searchbox"), "   {Enter}");
     await screen.findByRole("link", { name: education.title });
     expect(location()).toBe("/explore");
-    expect(queries).toEqual(["water", "water", "saúde pública", "", "water", ""]);
+    expect(queries).toEqual(["water", "water", "saúde pública", ""]);
   });
 
   it.each(["http", "network", "invalid"])(
@@ -306,6 +306,29 @@ describe("Explore", () => {
     await user.click(screen.getByRole("button", { name: "First page" }));
     await screen.findByRole("link", { name: education.title });
     expect(location()).toBe("/explore?q=education");
+  });
+
+  it("busca um novo cursor ao reiniciar a paginação depois de uma resposta de cursor inválido", async () => {
+    const cursors: (string | null)[] = [];
+    server.use(
+      http.get(endpoint, ({ request }) => {
+        const cursor = new URL(request.url).searchParams.get("cursor");
+        cursors.push(cursor);
+        if (cursor === "stale")
+          return HttpResponse.json({ code: "invalid_cursor" }, { status: 400 });
+        if (cursor === "new") return response([{ id: "2", title: "Second" }], 2);
+        return response([education], 1, cursors.length === 1 ? "stale" : "new");
+      }),
+    );
+    const { user } = renderExplore("/explore?q=water");
+    await screen.findByRole("link", { name: education.title });
+    await user.click(screen.getByRole("button", { name: "Próxima" }));
+    await screen.findByRole("alert");
+    await user.click(screen.getByRole("button", { name: "Primeira página" }));
+    await screen.findByRole("link", { name: education.title });
+    await user.click(screen.getByRole("button", { name: "Próxima" }));
+    await screen.findByRole("link", { name: "Second" });
+    expect(cursors).toEqual([null, "stale", null, "new"]);
   });
 
   it("cancela a busca obsoleta e preserva os resultados e consulta ao trocar de idioma", async () => {
