@@ -8,7 +8,7 @@ function mainNav() {
 }
 
 describe("rotas", () => {
-  it("renderiza cada rota conhecida", () => {
+  it("renderiza cada rota conhecida", async () => {
     const { unmount } = renderApp({ route: "/", language: "pt-BR" });
     expect(
       screen.getByRole("heading", { level: 1, name: "Descubra projetos de impacto social" }),
@@ -25,13 +25,13 @@ describe("rotas", () => {
     expect(
       screen.getByRole("heading", { level: 1, name: "Detalhes do projeto" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("Identificador do projeto: 42")).toBeInTheDocument();
+    expect(await screen.findByText("Projeto não encontrado.")).toBeInTheDocument();
   });
 
-  it("lê o id de /projects/:id e decodifica caracteres especiais", () => {
+  it("trata um id inválido mesmo quando a URL está codificada", () => {
     renderApp({ route: paths.project("a b/c"), language: "pt-BR" });
 
-    expect(screen.getByText("Identificador do projeto: a b/c")).toBeInTheDocument();
+    expect(screen.getByText("O identificador deste projeto é inválido.")).toBeInTheDocument();
   });
 
   it("mostra a página 404 numa rota desconhecida, mantendo o shell", () => {

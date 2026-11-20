@@ -67,6 +67,14 @@ histórico permite voltar à primeira página. Reinícios da API podem
 invalidar cursores, e a interface oferece retorno à primeira página
 preservando a busca.
 
+### Jornada de descoberta e detalhes
+
+Na Home, envie uma busca. Na Explore, abra um card para consultar
+`/projects/:id`. A página de detalhes preserva a busca e a posição ao voltar
+para Explore quando a visita começou em um card. Acessos diretos retornam
+ao catálogo. O link oficial, identificado como externo, aparece quando
+fornecido pela API e válido.
+
 ## Backend
 
 Sincronize o ambiente com as versões registradas em `uv.lock`:

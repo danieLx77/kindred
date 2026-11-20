@@ -15,17 +15,27 @@ export interface ProjectCard {
   organization?: OrganizationCard | null;
 }
 
+export interface ProjectDetail extends ProjectCard {
+  need?: string | null;
+  activities?: string | null;
+  long_term_impact?: string | null;
+  region?: string | null;
+  official_url?: string | null;
+}
+
 interface DiscoveryResponse {
   items: ProjectCard[];
   pagination: { page: number; page_size: number; next_cursor: string | null };
 }
 
-export class DiscoveryError extends Error {
+export class KindredApiError extends Error {
   readonly code: string;
+  readonly status: number;
 
-  constructor(code: string) {
-    super("Kindred discovery request failed");
+  constructor(code: string, status: number) {
+    super("Kindred API request failed");
     this.code = code;
+    this.status = status;
   }
 }
 
@@ -66,21 +76,48 @@ function isDiscoveryResponse(value: unknown): value is DiscoveryResponse {
   );
 }
 
-export async function fetchProjects(query: string, cursor: string | null, signal: AbortSignal) {
-  const url = new URL(discoveryPath, window.location.origin);
-  if (query) url.searchParams.set("q", query);
-  if (cursor !== null) url.searchParams.set("cursor", cursor);
-
+async function fetchKindred(url: URL, signal: AbortSignal): Promise<unknown> {
   const response = await fetch(url, {
     signal,
     redirect: "error",
     headers: { Accept: "application/json" },
   });
-  const body: unknown = await response.json();
+  const body: unknown = await response.json().catch(() => {
+    if (response.ok) throw new KindredApiError("invalid_response", response.status);
+    return null;
+  });
   if (!response.ok) {
     const code = isRecord(body) && typeof body.code === "string" ? body.code : "request_failed";
-    throw new DiscoveryError(code);
+    throw new KindredApiError(code, response.status);
   }
-  if (!isDiscoveryResponse(body)) throw new DiscoveryError("invalid_response");
+  return body;
+}
+
+export async function fetchProjects(query: string, cursor: string | null, signal: AbortSignal) {
+  const url = new URL(discoveryPath, window.location.origin);
+  if (query) url.searchParams.set("q", query);
+  if (cursor !== null) url.searchParams.set("cursor", cursor);
+
+  const body = await fetchKindred(url, signal);
+  if (!isDiscoveryResponse(body)) throw new KindredApiError("invalid_response", 200);
+  return body;
+}
+
+function isProjectDetail(value: unknown): value is ProjectDetail {
+  return (
+    isRecord(value) &&
+    [value.need, value.activities, value.long_term_impact, value.region, value.official_url].every(
+      optionalText,
+    ) &&
+    isCard(value)
+  );
+}
+
+export async function fetchProject(id: string, signal: AbortSignal): Promise<ProjectDetail> {
+  const url = new URL(`${discoveryPath}/${encodeURIComponent(id)}`, window.location.origin);
+  const body = await fetchKindred(url, signal);
+  if (!isProjectDetail(body) || body.id !== id) {
+    throw new KindredApiError("invalid_response", 200);
+  }
   return body;
 }

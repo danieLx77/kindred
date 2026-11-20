@@ -4,7 +4,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { describe, expect, it } from "vitest";
 
 import App from "../App";
-import { discoveryPath, type ProjectCard } from "../api/discovery";
+import { discoveryPath, type ProjectCard } from "../api/projects";
 import { server } from "../test/msw/server";
 import { renderWithProviders } from "../test/renderApp";
 
