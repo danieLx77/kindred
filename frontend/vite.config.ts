@@ -1,9 +1,15 @@
 /// <reference types="vitest/config" />
 import react from "@vitejs/plugin-react";
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv } from "vite";
 
 // https://vite.dev/config/
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
+  server: {
+    proxy: {
+      "/api":
+        loadEnv(mode, process.cwd(), "KINDRED_").KINDRED_API_TARGET || "http://127.0.0.1:8000",
+    },
+  },
   plugins: [react()],
   test: {
     environment: "happy-dom",
@@ -15,4 +21,4 @@ export default defineConfig({
       reporter: ["text", "html"],
     },
   },
-});
+}));
