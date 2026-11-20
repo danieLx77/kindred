@@ -44,8 +44,8 @@ describe("navegação por teclado", () => {
       screen.getByRole("link", { name: "Kindred" }),
       screen.getByRole("link", { name: "Início" }),
       screen.getByRole("link", { name: "Explorar" }),
-      screen.getByRole("button", { name: "Português" }),
-      screen.getByRole("button", { name: "English" }),
+      screen.getByRole("button", { name: "Português (Brasil)" }),
+      screen.getByRole("button", { name: "Inglês (Estados Unidos)" }),
       screen.getByRole("link", { name: "Explorar projetos" }),
     ];
 
@@ -57,8 +57,8 @@ describe("navegação por teclado", () => {
 
   it("Shift+Tab volta atrás na mesma ordem", async () => {
     const { user } = renderApp({ language: "pt-BR" });
-    const english = screen.getByRole("button", { name: "English" });
-    const portuguese = screen.getByRole("button", { name: "Português" });
+    const english = screen.getByRole("button", { name: "Inglês (Estados Unidos)" });
+    const portuguese = screen.getByRole("button", { name: "Português (Brasil)" });
 
     english.focus();
     await user.tab({ shift: true });
@@ -107,7 +107,7 @@ describe("navegação por teclado", () => {
 
   it("trocar de idioma não move o foco do botão", async () => {
     const { user } = renderApp({ language: "pt-BR" });
-    const english = screen.getByRole("button", { name: "English" });
+    const english = screen.getByRole("button", { name: "Inglês (Estados Unidos)" });
 
     english.focus();
     await user.keyboard("{Enter}");
@@ -115,19 +115,22 @@ describe("navegação por teclado", () => {
     expect(
       screen.getByRole("heading", { level: 1, name: "Discover social impact projects" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "English" })).toHaveFocus();
+    expect(screen.getByRole("button", { name: "English (United States)" })).toHaveFocus();
   });
 
   it("Enter e Espaço ativam o seletor de idioma", async () => {
     const { user } = renderApp({ language: "pt-BR" });
 
-    screen.getByRole("button", { name: "English" }).focus();
+    screen.getByRole("button", { name: "Inglês (Estados Unidos)" }).focus();
     await user.keyboard("{Enter}");
-    expect(screen.getByRole("button", { name: "English" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "English (United States)" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
 
-    screen.getByRole("button", { name: "Português" }).focus();
+    screen.getByRole("button", { name: "Portuguese (Brazil)" }).focus();
     await user.keyboard(" ");
-    expect(screen.getByRole("button", { name: "Português" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "Português (Brasil)" })).toHaveAttribute(
       "aria-pressed",
       "true",
     );
@@ -139,7 +142,7 @@ describe("navegação por teclado", () => {
   it("a escolha de idioma feita por teclado persiste", async () => {
     const { user } = renderApp({ language: "pt-BR" });
 
-    screen.getByRole("button", { name: "English" }).focus();
+    screen.getByRole("button", { name: "Inglês (Estados Unidos)" }).focus();
     await user.keyboard("{Enter}");
 
     expect(window.localStorage.getItem("kindred.language")).toBe("en");

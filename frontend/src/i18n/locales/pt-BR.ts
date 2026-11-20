@@ -12,8 +12,8 @@ const ptBR = {
   },
   language: {
     label: "Idioma",
-    pt: "Português",
-    en: "English",
+    pt: "Português (Brasil)",
+    en: "Inglês (Estados Unidos)",
   },
   footer: {
     copyright: "© {{year}} Kindred",
