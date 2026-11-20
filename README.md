@@ -67,6 +67,12 @@ histórico permite voltar à primeira página. Reinícios da API podem
 invalidar cursores, e a interface oferece retorno à primeira página
 preservando a busca.
 
+A Explore mantém até 12 páginas visitadas em memória por aba, por 60 segundos
+a partir da resposta. A chave inclui a consulta, o tamanho da página e o
+cursor. Voltar a uma página em cache reutiliza seus resultados, inclusive
+ao retornar de um detalhe. Uma resposta de cursor inválido limpa o cache
+para que o retorno à primeira página solicite uma continuação nova.
+
 ### Jornada de descoberta e detalhes
 
 Na Home, envie uma busca. Na Explore, abra um card para consultar

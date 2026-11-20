@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type SubmitEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
 
+import type { ExplorePageCache } from "../api/explorePageCache";
 import { KindredApiError, fetchProjects } from "../api/projects";
 import { ProjectResultCard } from "../components/ProjectResultCard";
 import { StateMessage } from "../components/StateMessage";
@@ -27,6 +28,7 @@ function previousCursors(state: unknown): Cursor[] {
 }
 
 interface ExploreResultsProps {
+  cache: ExplorePageCache;
   query: string;
   cursor: Cursor;
   previous: Cursor[];
@@ -34,28 +36,41 @@ interface ExploreResultsProps {
   openPage: (query: string, cursor: Cursor, previous: Cursor[]) => void;
 }
 
-function ExploreResults({ query, cursor, previous, focusResults, openPage }: ExploreResultsProps) {
+function ExploreResults({
+  cache,
+  query,
+  cursor,
+  previous,
+  focusResults,
+  openPage,
+}: ExploreResultsProps) {
   const { t } = useTranslation();
-  const [result, setResult] = useState<Result>({ status: "loading" });
+  const [cachedPage] = useState(() => cache.read(query, cursor));
+  const [result, setResult] = useState<Result>(
+    cachedPage ? { status: "loaded", data: cachedPage } : { status: "loading" },
+  );
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
+    if (cachedPage) return;
+
     const controller = new AbortController();
     void fetchProjects(query, cursor, controller.signal).then(
       (data) => {
-        if (!controller.signal.aborted) setResult({ status: "loaded", data });
+        if (controller.signal.aborted) return;
+        cache.write(query, cursor, data);
+        setResult({ status: "loaded", data });
       },
       (error: unknown) => {
-        if (!controller.signal.aborted) {
-          setResult({
-            status: "error",
-            invalidCursor: error instanceof KindredApiError && error.code === "invalid_cursor",
-          });
-        }
+        if (controller.signal.aborted) return;
+        const invalidCursor = error instanceof KindredApiError && error.code === "invalid_cursor";
+        // A Kindred API restart can invalidate cursors in all cached responses.
+        if (invalidCursor) cache.clear();
+        setResult({ status: "error", invalidCursor });
       },
     );
     return () => controller.abort();
-  }, [query, cursor, attempt]);
+  }, [cache, cachedPage, query, cursor, attempt]);
 
   function retry() {
     focusResults();
@@ -127,7 +142,7 @@ function ExploreResults({ query, cursor, previous, focusResults, openPage }: Exp
   );
 }
 
-export function ExplorePage() {
+export function ExplorePage({ cache }: { cache: ExplorePageCache }) {
   const { t } = useTranslation();
   const location = useLocation();
   const navigate = useNavigate();
@@ -194,6 +209,7 @@ export function ExplorePage() {
         </h2>
         <ExploreResults
           key={pageKey}
+          cache={cache}
           query={query}
           cursor={cursor}
           previous={previous}
