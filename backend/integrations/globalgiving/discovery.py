@@ -1,20 +1,37 @@
 """Discovery half of ProjectProvider. No detail lookup or public API here."""
 
+import asyncio
 import base64
 import hashlib
 import hmac
 import json
 import os
 import secrets
+from dataclasses import replace
 from types import TracebackType
 from typing import TypeVar
+from urllib.parse import urlsplit
 
 import httpx
 
-from projects.models import Continuation, DiscoveryQuery, DiscoveryResult
+from projects.errors import ProviderError
+from projects.models import (
+    Continuation,
+    DiscoveryQuery,
+    DiscoveryResult,
+    ProjectSummary,
+)
 
 from .http import GlobalGivingHTTP
-from .mapping import integer, invalid_response, object_value, summaries
+from .mapping import (
+    card_image_variants,
+    integer,
+    invalid_response,
+    object_value,
+    summaries,
+)
+
+_IMAGE_LOOKUP_TIMEOUT = 2.0
 
 _DiscoveryAdapterT = TypeVar("_DiscoveryAdapterT", bound="GlobalGivingDiscoveryAdapter")
 
@@ -105,7 +122,35 @@ class GlobalGivingDiscoveryAdapter:
             next_page = self._encode(query, position, consumed)
         elif next_position is not None:
             next_page = self._encode(query, next_position, 0)
-        return DiscoveryResult(items, next_page)
+        return DiscoveryResult(await self._enrich_card_images(items), next_page)
+
+    async def _enrich_card_images(
+        self, items: tuple[ProjectSummary, ...]
+    ) -> tuple[ProjectSummary, ...]:
+        pending = [project.id for project in items if _uses_default_image(project)]
+        if not pending:
+            return items
+
+        # The full-project collection supplies official variants for up to 10 IDs.
+        # This optional request must not delay discovery by another full API timeout.
+        try:
+            payload = await asyncio.wait_for(
+                self._http.get(
+                    "projectservice/projects/collection/ids",
+                    {"projectIds": ",".join(pending)},
+                ),
+                timeout=_IMAGE_LOOKUP_TIMEOUT,
+            )
+            images = card_image_variants(payload)
+        except (ProviderError, asyncio.TimeoutError):
+            return items
+
+        return tuple(
+            replace(project, image_url=images[project.id])
+            if project.id in pending and project.id in images
+            else project
+            for project in items
+        )
 
     @staticmethod
     def _query_key(query: DiscoveryQuery) -> str:
@@ -167,3 +212,12 @@ class GlobalGivingDiscoveryAdapter:
         traceback: TracebackType | None,
     ) -> None:
         await self.aclose()
+
+
+def _uses_default_image(project: ProjectSummary) -> bool:
+    if project.image_url is None:
+        return False
+    url = urlsplit(project.image_url)
+    return url.hostname in {"www.globalgiving.org", "globalgiving.org"} and (
+        url.path == f"/pfil/{project.id}/pict.jpg"
+    )

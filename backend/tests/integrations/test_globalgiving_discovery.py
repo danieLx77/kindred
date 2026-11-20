@@ -20,6 +20,7 @@ from projects.models import (
 BASE = "https://api.globalgiving.org/api/public/"
 LIST = BASE + "projectservice/all/projects/summary"
 SEARCH = BASE + "services/search/projects"
+COLLECTION = BASE + "projectservice/projects/collection/ids"
 KEY = "test-globalgiving-key"
 
 
@@ -122,6 +123,126 @@ async def test_large_page_size_is_upper_bound_not_bulk_fetch(
     assert len(result.items) == 10
     assert route.call_count == 1
     assert result.continuation is None
+
+
+async def test_catalog_enriches_only_visible_thumbnails_in_one_collection(
+    adapter, globalgiving_environment
+) -> None:
+    thumbnails = {
+        project_id: f"https://www.globalgiving.org/pfil/{project_id}/pict.jpg"
+        for project_id in (1, 2, 3, 5)
+    }
+    independent = "https://images.example.org/already-selected.jpg"
+    large = "https://images.example.org/official-card-variant.jpg"
+    items = [
+        {"id": 2, "imageLink": thumbnails[2]},
+        {"id": 1, "title": "Keep title", "imageLink": thumbnails[1]},
+        {"id": 4, "imageLink": independent},
+        {"id": 6},
+        {"id": 5, "imageLink": thumbnails[5]},
+        {"id": 3, "imageLink": thumbnails[3]},
+    ]
+    primary = globalgiving_environment.get(LIST).respond(200, json=listing(items))
+    collection = globalgiving_environment.get(COLLECTION).respond(
+        200,
+        json=listing(
+            [
+                {
+                    "id": 1,
+                    "title": "Do not use collection's title",
+                    "image": {"imagelink": {"@size": "large", "url": large}},
+                },
+                {
+                    "id": 2,
+                    "image": {
+                        "imagelink": {"@size": "large", "url": "javascript:alert(1)"}
+                    },
+                },
+                {"id": 4, "image": {"imagelink": {"@size": "large", "url": large}}},
+                {"id": 6, "image": {"imagelink": {"@size": "large", "url": large}}},
+            ]
+        ),
+    )
+
+    result = await adapter.discover(DiscoveryQuery(page_size=5))
+
+    assert result.items == (
+        ProjectSummary("2", image_url=thumbnails[2]),
+        ProjectSummary("1", title="Keep title", image_url=large),
+        ProjectSummary("4", image_url=independent),
+        ProjectSummary("6"),
+        ProjectSummary("5", image_url=thumbnails[5]),
+    )
+    assert result.continuation is not None
+    assert primary.call_count == collection.call_count == 1
+    assert collection.calls.last.request.url.params["projectIds"] == "2,1,5"
+
+
+async def test_search_uses_inline_card_variant_without_a_collection_call(
+    adapter, globalgiving_environment
+) -> None:
+    large = "https://images.example.org/card.jpg?format=jpeg"
+    project = {
+        "id": 1,
+        "imageLink": "https://www.globalgiving.org/pfil/1/pict.jpg",
+        "image": {
+            "imagelink": [
+                {"@size": "thumbnail", "url": "https://images.example.org/tiny.jpg"},
+                {"@size": "extraLarge", "url": "https://images.example.org/hero.jpg"},
+                {"@size": "large", "url": large},
+            ]
+        },
+    }
+    route = globalgiving_environment.get(SEARCH).respond(200, json=search(project))
+
+    result = await adapter.discover(DiscoveryQuery(text="water"))
+
+    assert result.items == (ProjectSummary("1", image_url=large),)
+    assert route.call_count == 1
+
+
+@pytest.mark.parametrize(
+    "response", [httpx.Response(503), httpx.Response(200, json={})]
+)
+async def test_optional_collection_failure_keeps_thumbnail(
+    adapter, globalgiving_environment, response
+) -> None:
+    thumbnail = "https://www.globalgiving.org/pfil/1/pict.jpg"
+    globalgiving_environment.get(LIST).respond(
+        200, json=listing({"id": 1, "imageLink": thumbnail})
+    )
+    collection = globalgiving_environment.get(COLLECTION).mock(return_value=response)
+
+    result = await adapter.discover()
+
+    assert result == DiscoveryResult((ProjectSummary("1", image_url=thumbnail),))
+    assert collection.call_count == 1
+
+
+async def test_optional_collection_has_short_deadline(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "integrations.globalgiving.discovery._IMAGE_LOOKUP_TIMEOUT", 0.02
+    )
+    thumbnail = "https://www.globalgiving.org/pfil/1/pict.jpg"
+    cancelled = asyncio.Event()
+
+    async def respond(request: httpx.Request) -> httpx.Response:
+        if request.url.path == httpx.URL(LIST).path:
+            return httpx.Response(200, json=listing({"id": 1, "imageLink": thumbnail}))
+        assert request.url.path == httpx.URL(COLLECTION).path
+        try:
+            await asyncio.sleep(10)
+        finally:
+            cancelled.set()
+        raise AssertionError("optional request should have been cancelled")
+
+    async with GlobalGivingDiscoveryAdapter(
+        transport=httpx.MockTransport(respond)
+    ) as adapter:
+        result = await asyncio.wait_for(adapter.discover(), timeout=1)
+
+    assert cancelled.is_set()
+    assert result == DiscoveryResult((ProjectSummary("1", image_url=thumbnail),))
 
 
 @pytest.mark.parametrize("text", [None, "", "   "])

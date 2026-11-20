@@ -146,12 +146,17 @@ Logs HTTPX/HTTPcore são suprimidos apenas no contexto dessas chamadas, inclusiv
 leitura e fechamento, para não registrar a chave exigida na query string. O
 cliente próprio não instala hooks de tracing nem usa proxies do ambiente.
 
-Cada chamada busca no máximo um lote externo de 10 itens. `page_size` é um
+Cada consulta de descoberta busca um lote externo de até 10 projetos. `page_size` é um
 limite superior; lotes podem ser menores. Na listagem, lotes menores são retomados
 com a mesma posição externa e um deslocamento interno, sem cache de projetos.
 Na busca, qualquer lote não vazio permite tentar a próxima posição; apenas uma
 resposta vazia confirma o fim, independentemente de `numberFound`. Isso pode
 exigir uma chamada adicional no final. Não há garantia de snapshot estável.
+
+Os cards preferem a variante `large` da GlobalGiving quando disponível.
+Quando a resposta entrega apenas a miniatura padrão, o adapter pode buscar
+variantes em uma única consulta adicional para os projetos da página exibida.
+Essa consulta tem limite de 2 segundos e preserva as miniaturas se falhar.
 
 As continuações são estado interno assinado, vinculado à consulta e à instância,
 sem armazenamento de páginas. Permitem replay enquanto a instância existir;
@@ -174,7 +179,8 @@ Organização sem ID utilizável não gera referência fictícia.
 o projeto e retorna `ProjectDetail`. Um 404 retorna `None`; 410, timeout e outras
 falhas externas mantêm as categorias de erro da integração. Campos opcionais
 sem dados utilizáveis são omitidos. O link oficial vem de `projectLink`, e a
-imagem vem de `imageLink` ou de uma variante válida presente no detalhe. O
+imagem prioriza a variante `extraLarge`, com fallback para outras imagens
+fornecidas pelo provedor. O
 adapter não consulta a galeria nem interpreta os valores financeiros do provedor.
 
 A API da #16 expõe `GET /api/v1/projects/{project_id}`. O detalhe usa o

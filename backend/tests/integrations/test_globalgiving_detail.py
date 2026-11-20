@@ -15,6 +15,7 @@ URL = "https://api.globalgiving.org/api/public/projectservice/projects/42"
 KEY = "test-globalgiving-key"
 IMAGE = "https://www.globalgiving.org/pfil/42/pict.jpg"
 LINK = "https://www.globalgiving.org/projects/community-library/"
+HERO = "https://images.example.test/library-hero.jpg"
 
 
 @pytest.fixture
@@ -40,7 +41,17 @@ async def test_maps_detail_and_makes_one_authenticated_request(
                 "themeName": "Education",
                 "country": "Brazil",
                 "imageLink": IMAGE,
-                "image": {"imagelink": [{"url": "https://example.test/variant.jpg"}]},
+                "image": {
+                    "imagelink": [
+                        {"@size": "large", "url": "https://example.test/card.jpg"},
+                        {
+                            "@size": "original",
+                            "url": "https://example.test/original.jpg",
+                        },
+                        {"@size": "extraLarge", "url": "javascript:alert(1)"},
+                        {"@size": "extraLarge", "url": HERO},
+                    ]
+                },
                 "projectLink": LINK,
                 "organization": {
                     "id": 7,
@@ -58,7 +69,7 @@ async def test_maps_detail_and_makes_one_authenticated_request(
             id="42",
             title="Community library",
             summary="Books and a place to read.",
-            image_url=IMAGE,
+            image_url=HERO,
             theme="Education",
             country="Brazil",
             organization=OrganizationReference(
@@ -141,6 +152,28 @@ async def test_maps_nested_image_and_partial_organization(
 
     assert await provider.get_project("42") == ProjectDetail(
         ProjectSummary("42", image_url=IMAGE, organization=OrganizationReference("7"))
+    )
+
+
+@pytest.mark.parametrize("size", ["extraLarge", "original"])
+async def test_maps_image_size_options_when_gallery_shape_is_unavailable(
+    provider: ProjectProvider, globalgiving_environment: MockRouter, size: str
+) -> None:
+    globalgiving_environment.get(URL).respond(
+        200,
+        json={
+            "project": {
+                "id": 42,
+                "imageLink": IMAGE,
+                "imageSizeOptions": {
+                    "image": {"size": size, "url": HERO},
+                },
+            }
+        },
+    )
+
+    assert await provider.get_project("42") == ProjectDetail(
+        ProjectSummary("42", image_url=HERO)
     )
 
 

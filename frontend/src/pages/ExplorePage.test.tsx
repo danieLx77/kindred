@@ -62,7 +62,7 @@ describe("Explore", () => {
             ...education,
             summary: "Community classrooms.",
             organization: { id: "2", name: "Open School" },
-            image_url: "https://example.test/project.png",
+            image_url: "https://example.test/card-large.jpg",
           },
           { id: "43", image_url: null, title: null, organization: null },
         ]);
@@ -79,10 +79,13 @@ describe("Explore", () => {
     expect(within(list).getByText("Open School")).toBeInTheDocument();
     expect(within(list).getByText("Community classrooms.")).toBeInTheDocument();
     const image = list.querySelector("img");
+    expect(image).toHaveAttribute("src", "https://example.test/card-large.jpg");
     expect(image).toHaveAttribute("alt", "");
+    expect(image).toHaveAttribute("loading", "lazy");
     expect(image).toHaveAttribute("referrerpolicy", "no-referrer");
     fireEvent.error(image!);
     expect(list.querySelector("img")).toBeNull();
+    expect(list.querySelectorAll('.explore-card__media[aria-hidden="true"]')).toHaveLength(2);
     const partialLink = within(list).getByRole("link", { name: "Projeto 43" });
     expect(partialLink).toHaveAttribute("href", "/projects/43");
     await user.click(partialLink);
