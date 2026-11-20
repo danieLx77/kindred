@@ -71,10 +71,36 @@ class GlobalGivingHTTP:
             transport=transport,
         )
 
-    async def get(self, path: str, params: dict[str, str]) -> object:
+    async def get(
+        self, path: str, params: dict[str, str], *, retry_timeout: bool = False
+    ) -> object:
         token = _sensitive_request.set(True)
         try:
-            return await asyncio.wait_for(self._get(path, params), self._timeout)
+            if retry_timeout:
+                return await self._get_with_timeout_retry(path, params)
+            return await self._get_once(path, params, self._timeout)
+        finally:
+            _sensitive_request.reset(token)
+
+    async def _get_with_timeout_retry(
+        self, path: str, params: dict[str, str]
+    ) -> object:
+        # Leave part of the original deadline for one retry of this read-only call.
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + self._timeout
+        try:
+            return await self._get_once(path, params, self._timeout * 0.8)
+        except ProviderError as error:
+            remaining = deadline - loop.time()
+            if error.reason is not ProviderFailure.TIMEOUT or remaining <= 0:
+                raise
+        return await self._get_once(path, params, remaining)
+
+    async def _get_once(
+        self, path: str, params: dict[str, str], timeout: float
+    ) -> object:
+        try:
+            return await asyncio.wait_for(self._get(path, params), timeout)
         except (asyncio.TimeoutError, httpx.TimeoutException):
             raise ProviderError(ProviderFailure.TIMEOUT) from None
         except httpx.DecodingError:
@@ -83,8 +109,6 @@ class GlobalGivingHTTP:
             raise ProviderError(ProviderFailure.NETWORK) from None
         except (ValueError, UnicodeError, RecursionError):
             raise ProviderError(ProviderFailure.INVALID_RESPONSE) from None
-        finally:
-            _sensitive_request.reset(token)
 
     async def _get(self, path: str, params: dict[str, str]) -> object:
         async with self._client.stream(
@@ -99,6 +123,7 @@ class GlobalGivingHTTP:
                     404: ProviderFailure.NOT_FOUND,
                     410: ProviderFailure.UNAVAILABLE,
                     429: ProviderFailure.RATE_LIMITED,
+                    504: ProviderFailure.TIMEOUT,
                 }.get(status, ProviderFailure.UNAVAILABLE)
                 raise ProviderError(reason)
             body = bytearray()
