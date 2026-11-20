@@ -75,6 +75,13 @@ para Explore quando a visita começou em um card. Acessos diretos retornam
 ao catálogo. O link oficial, identificado como externo, aparece quando
 fornecido pela API e válido.
 
+### Bandeiras do seletor de idioma
+
+Os arquivos `br.svg` e `us.svg` em `frontend/src/assets/flags/` são cópias da
+[variante retangular do flag-icons v7.3.2](https://github.com/lipis/flag-icons/tree/v7.3.2/flags/4x3).
+O [aviso MIT original](frontend/public/licenses/flag-icons.txt) acompanha os assets
+na distribuição do frontend.
+
 ## Backend
 
 Sincronize o ambiente com as versões registradas em `uv.lock`:

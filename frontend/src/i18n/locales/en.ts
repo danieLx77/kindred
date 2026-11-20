@@ -14,8 +14,8 @@ const en: Translation = {
   },
   language: {
     label: "Language",
-    pt: "Português",
-    en: "English",
+    pt: "Portuguese (Brazil)",
+    en: "English (United States)",
   },
   footer: {
     copyright: "© {{year}} Kindred",

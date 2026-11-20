@@ -135,6 +135,17 @@ describe("Explore", () => {
     await screen.findByText("Página 2");
     expect(screen.getByRole("heading", { name: "Resultados de projetos" })).toHaveFocus();
     expect(location()).toBe("/explore?q=educa%C3%A7%C3%A3o&cursor=second%2B%2F%3D");
+    await user.click(screen.getByRole("button", { name: "Inglês (Estados Unidos)" }));
+    expect(screen.getByText("Page 2")).toBeInTheDocument();
+    expect(screen.getByRole("searchbox", { name: "Search social projects" })).toHaveValue(
+      "educação",
+    );
+    expect(screen.getByRole("link", { name: "Second" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Previous" })).toBeEnabled();
+    expect(location()).toBe("/explore?q=educa%C3%A7%C3%A3o&cursor=second%2B%2F%3D");
+    expect(seen).toEqual(["", "second+/="]);
+    await user.click(screen.getByRole("button", { name: "Portuguese (Brazil)" }));
+    expect(screen.getByText("Página 2")).toBeInTheDocument();
     await user.click(next());
     await screen.findByText("Página 3");
     expect(screen.getByText(/Não há mais resultados/)).toBeInTheDocument();
@@ -326,7 +337,7 @@ describe("Explore", () => {
     slow.release();
     await returned.promise;
 
-    await user.click(screen.getByRole("button", { name: "English" }));
+    await user.click(screen.getByRole("button", { name: "Inglês (Estados Unidos)" }));
     expect(screen.getByRole("searchbox", { name: "Search social projects" })).toHaveValue("fast");
     expect(screen.getByRole("button", { name: "Previous" })).toBeDisabled();
     expect(screen.getByRole("link", { name: education.title })).toBeInTheDocument();

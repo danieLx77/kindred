@@ -66,8 +66,10 @@ describe("Project Detail", () => {
         return HttpResponse.json(full);
       }),
     );
-    const { user } = renderApp({ route: "/projects/00042", language: "pt-BR" });
-    expect(screen.getByRole("status")).toHaveTextContent("Carregando detalhes do projeto…");
+    const { user } = renderJourney("/projects/00042");
+    expect(within(screen.getByRole("main")).getByRole("status")).toHaveTextContent(
+      "Carregando detalhes do projeto…",
+    );
     gate.release();
     const title = await screen.findByRole("heading", { name: full.title, level: 1 });
     expect(title).toBeInTheDocument();
@@ -100,12 +102,15 @@ describe("Project Detail", () => {
     await user.tab();
     expect(action).toHaveFocus();
 
-    await user.click(screen.getByRole("button", { name: "English" }));
+    await user.click(screen.getByRole("button", { name: "Inglês (Estados Unidos)" }));
     expect(screen.getByRole("heading", { name: "Long-term impact", level: 2 })).toBeInTheDocument();
     expect(screen.getByText(full.long_term_impact)).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: /official project page.*external site/i }),
     ).toHaveAttribute("href", official);
+    expect(screen.getByRole("status", { name: "Location" })).toHaveTextContent(
+      /^\/projects\/00042$/,
+    );
     expect(requests).toEqual([`${endpoint}/42`]);
   });
 

@@ -66,7 +66,7 @@ describe("Home", () => {
   it("traduz a Home, mantém o termo durante a troca de idioma e envia pelo botão", async () => {
     const { user, unmount } = renderWithLocation("pt-BR");
     await user.type(screen.getByRole("searchbox", { name: "Pesquisar projetos sociais" }), "water");
-    await user.click(screen.getByRole("button", { name: "English" }));
+    await user.click(screen.getByRole("button", { name: "Inglês (Estados Unidos)" }));
 
     expect(
       screen.getByRole("heading", { level: 1, name: "Discover social impact projects" }),
@@ -98,7 +98,7 @@ describe("Home", () => {
 
   it("percorre ação principal, campo e botão com Tab e ativa Explore com Enter", async () => {
     const { user } = renderWithLocation("en");
-    screen.getByRole("button", { name: "English" }).focus();
+    screen.getByRole("button", { name: "English (United States)" }).focus();
 
     const explore = screen.getByRole("link", { name: "Explore projects" });
     const field = screen.getByRole("searchbox", { name: "Search social projects" });
