@@ -228,12 +228,13 @@ describe("Project Detail", () => {
         const params = new URL(request.url).searchParams;
         const cursor = params.get("cursor");
         expect(params.get("q")).toBe("education");
+        expect(params.get("page_size")).toBe("9");
         visits.push(cursor ?? "first");
         return HttpResponse.json({
           items: [cursor ? full : { id: "28", title: "Another project" }],
           pagination: {
             page: cursor ? 2 : 1,
-            page_size: 10,
+            page_size: 9,
             next_cursor: cursor ? null : "opaque",
           },
         });

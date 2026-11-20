@@ -12,7 +12,7 @@ const endpoint = new URL(discoveryPath, window.location.href).href;
 const education = { id: "42", title: "Learning for all", theme: "Education", country: "Brazil" };
 
 function response(items: ProjectCard[], page = 1, next_cursor: string | null = null) {
-  return HttpResponse.json({ items, pagination: { page, page_size: 10, next_cursor } });
+  return HttpResponse.json({ items, pagination: { page, page_size: 9, next_cursor } });
 }
 
 function LocationProbe() {
@@ -55,7 +55,7 @@ describe("Explore", () => {
     const gate = deferred();
     server.use(
       http.get(endpoint, async ({ request }) => {
-        expect(new URL(request.url).search).toBe("");
+        expect(new URL(request.url).search).toBe("?page_size=9");
         await gate.promise;
         return response([
           {
@@ -149,6 +149,70 @@ describe("Explore", () => {
     expect(seen).toEqual(["", "second+/=", "third", "second+/=", ""]);
   });
 
+  it.each(["", "água"])(
+    "exibe todos os projetos na ordem em páginas de nove (%s)",
+    async (query) => {
+      const projects = Array.from({ length: 31 }, (_, index) => ({
+        id: String(101 + index * 7),
+        title: `Projeto ${index + 1}`,
+      }));
+      server.use(
+        http.get(endpoint, ({ request }) => {
+          const params = new URL(request.url).searchParams;
+          expect(params.get("q") ?? "").toBe(query);
+          expect(params.get("page_size")).toBe("9");
+          const page = Number(params.get("cursor")?.replace("opaque-", "") ?? "1");
+          return response(
+            projects.slice((page - 1) * 9, page * 9),
+            page,
+            page < 4 ? `opaque-${page + 1}` : null,
+          );
+        }),
+      );
+      const { user } = renderExplore(
+        query ? `/explore?q=${encodeURIComponent(query)}` : "/explore",
+      );
+      const next = () => screen.getByRole("button", { name: "Próxima" });
+      const previous = () => screen.getByRole("button", { name: "Anterior" });
+
+      async function expectPage(page: number) {
+        await screen.findByText(`Página ${page}`);
+        const list = screen.getByRole("list", { name: "Resultados de projetos" });
+        expect(
+          within(list)
+            .getAllByRole("link")
+            .map((link) => link.textContent),
+        ).toEqual(projects.slice((page - 1) * 9, page * 9).map((project) => project.title));
+      }
+
+      await expectPage(1);
+      for (const page of [2, 3, 4]) {
+        await user.click(next());
+        await expectPage(page);
+      }
+      expect(next()).toBeDisabled();
+      for (const page of [3, 2, 1]) {
+        await user.click(previous());
+        await expectPage(page);
+      }
+      expect(previous()).toBeDisabled();
+    },
+  );
+
+  it("exibe nove projetos quando a primeira página também é a última", async () => {
+    const projects = Array.from({ length: 9 }, (_, index) => ({
+      id: String(index + 1),
+      title: `Projeto ${index + 1}`,
+    }));
+    server.use(http.get(endpoint, () => response(projects)));
+    renderExplore("/explore");
+
+    const list = await screen.findByRole("list", { name: "Resultados de projetos" });
+    expect(within(list).getAllByRole("listitem")).toHaveLength(9);
+    expect(screen.getByRole("button", { name: "Anterior" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Próxima" })).toBeDisabled();
+  });
+
   it("reinicia a posição ao enviar outra consulta e volta ao catálogo ao limpar ou enviar vazio", async () => {
     const queries: string[] = [];
     server.use(
@@ -211,7 +275,10 @@ describe("Explore", () => {
       expect(alert).not.toHaveTextContent("internal");
       await user.click(within(alert).getByRole("button", { name: "Tentar novamente" }));
       await screen.findByRole("link", { name: education.title });
-      expect(requests).toEqual(["?q=education&cursor=opaque", "?q=education&cursor=opaque"]);
+      expect(requests).toEqual([
+        "?page_size=9&q=education&cursor=opaque",
+        "?page_size=9&q=education&cursor=opaque",
+      ]);
     },
   );
 

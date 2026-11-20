@@ -72,17 +72,13 @@ class GlobalGivingDiscoveryAdapter:
         if continuation is not None:
             position, skip = self._decode(continuation, query)
 
-        params: dict[str, str] = {}
         if searching:
-            path = "services/search/projects"
-            params = {"q": text, "start": str(position)}
-        else:
-            path = "projectservice/all/projects/summary"
-            if position is not None:
-                params["nextProjectId"] = str(position)
-        data = object_value(await self._http.get(path, params))
-        next_position = None
-        if searching:
+            assert position is not None
+            data = object_value(
+                await self._http.get(
+                    "services/search/projects", {"q": text, "start": str(position)}
+                )
+            )
             response = object_value(object_value(data.get("search")).get("response"))
             if "@start" in response and integer(response["@start"]) != position:
                 raise invalid_response()
@@ -90,39 +86,53 @@ class GlobalGivingDiscoveryAdapter:
             container = {} if raw_projects is None else object_value(raw_projects)
             if "project" not in container and container:
                 raise invalid_response()
+            items = summaries(container)[: query.page_size]
+            next_page = self._encode(query, position + len(items), 0) if items else None
         else:
-            container = object_value(data.get("projects"))
-            if "project" not in container and set(container) - {
-                "hasNext",
-                "nextProjectId",
-                "@numberFound",
-                "numberFound",
-            }:
+            projects, next_position = await self._listing_batch(position)
+            if skip and skip >= len(projects):
                 raise invalid_response()
-            flag = container.get("hasNext", False)
-            if type(flag) is not bool and flag not in ("true", "false"):
-                raise invalid_response()
-            if flag in (True, "true"):
-                next_position = integer(container.get("nextProjectId"), minimum=1)
-                if position is not None and next_position <= position:
-                    raise invalid_response()
+            items = projects[skip : skip + query.page_size]
+            consumed = skip + len(items)
+            if skip and len(items) < query.page_size and next_position is not None:
+                # Finish a page that starts with the remainder of a split batch.
+                position = next_position
+                projects, next_position = await self._listing_batch(position)
+                consumed = min(query.page_size - len(items), len(projects))
+                items += projects[:consumed]
 
-        projects = summaries(container)
-        if skip and skip >= len(projects):
-            raise invalid_response()
-        if not projects and next_position is not None:
-            raise invalid_response()
-        items = projects[skip : skip + query.page_size]
-        consumed = skip + len(items)
-        next_page = None
-        if searching and projects:
-            assert position is not None
-            next_page = self._encode(query, position + len(items), 0)
-        elif consumed < len(projects):
-            next_page = self._encode(query, position, consumed)
-        elif next_position is not None:
-            next_page = self._encode(query, next_position, 0)
+            next_page = None
+            if consumed < len(projects):
+                next_page = self._encode(query, position, consumed)
+            elif next_position is not None:
+                next_page = self._encode(query, next_position, 0)
         return DiscoveryResult(await self._enrich_card_images(items), next_page)
+
+    async def _listing_batch(
+        self, position: int | None
+    ) -> tuple[tuple[ProjectSummary, ...], int | None]:
+        params = {"nextProjectId": str(position)} if position is not None else {}
+        data = object_value(
+            await self._http.get("projectservice/all/projects/summary", params)
+        )
+        container = object_value(data.get("projects"))
+        if "project" not in container and set(container) - {
+            "hasNext",
+            "nextProjectId",
+            "@numberFound",
+            "numberFound",
+        }:
+            raise invalid_response()
+        flag = container.get("hasNext", False)
+        if type(flag) is not bool and flag not in ("true", "false"):
+            raise invalid_response()
+        projects = summaries(container)
+        next_position = None
+        if flag in (True, "true"):
+            next_position = integer(container.get("nextProjectId"), minimum=1)
+            if not projects or (position is not None and next_position <= position):
+                raise invalid_response()
+        return projects, next_position
 
     async def _enrich_card_images(
         self, items: tuple[ProjectSummary, ...]

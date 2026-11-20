@@ -270,6 +270,86 @@ async def test_lifespan_owns_client_and_cursor_with_real_adapter(monkeypatch):
 
 
 @pytest.mark.parametrize("search", [False, True])
+async def test_nine_project_pages_preserve_provider_order(monkeypatch, search):
+    monkeypatch.setenv("GLOBALGIVING_API_KEY", "fake-key")
+    projects = [{"id": 101 + i * 7} for i in range(31)]
+    ids = [str(project["id"]) for project in projects]
+    positions = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        if search:
+            assert request.url.params["q"] == "water"
+            start = int(request.url.params["start"])
+            payload = {
+                "search": {
+                    "response": {
+                        "@start": start,
+                        "projects": {"project": projects[start : start + 10]},
+                    }
+                }
+            }
+        else:
+            cursor = request.url.params.get("nextProjectId")
+            start = ids.index(cursor) if cursor is not None else 0
+            batch: dict[str, object] = {"project": projects[start : start + 10]}
+            if start + 10 < len(projects):
+                batch.update(hasNext=True, nextProjectId=projects[start + 10]["id"])
+            payload = {"projects": batch}
+        positions.append(start)
+        return httpx.Response(200, json=payload)
+
+    params = {"page_size": "9", **({"q": "water"} if search else {})}
+    provider = GlobalGivingProjectProvider(transport=httpx.MockTransport(respond))
+    async with provider, app_client(create_app(provider)) as client:
+        cursor = None
+        for page, offset in enumerate(range(0, len(projects), 9), 1):
+            response = await client.get(
+                PATH, params={**params, **({"cursor": cursor} if cursor else {})}
+            )
+            assert response.status_code == 200
+            body = response.json()
+            assert [item["id"] for item in body["items"]] == ids[offset : offset + 9]
+            assert body["pagination"]["page"] == page
+            assert body["pagination"]["page_size"] == 9
+            cursor = body["pagination"]["next_cursor"]
+            if page == 1:
+                assert cursor is not None
+                incompatible = await client.get(
+                    PATH, params={**params, "page_size": "10", "cursor": cursor}
+                )
+                assert incompatible.status_code == 400
+                assert incompatible.json() == {"code": "invalid_cursor"}
+
+        if search:
+            assert cursor is not None
+            empty = await client.get(PATH, params={**params, "cursor": cursor})
+            assert empty.json() == {
+                "items": [],
+                "pagination": {"page": 5, "page_size": 9, "next_cursor": None},
+            }
+            assert positions == [0, 9, 18, 27, 31]
+        else:
+            assert cursor is None
+            assert positions == [0, 0, 10, 10, 20, 20, 30]
+
+        first = await client.get(PATH, params=params)
+        assert [item["id"] for item in first.json()["items"]] == ids[:9]
+        default = await client.get(
+            PATH,
+            params={key: value for key, value in params.items() if key != "page_size"},
+        )
+        default_body = default.json()
+        assert [item["id"] for item in default_body["items"]] == ids[:10]
+        previous_size_cursor = default_body["pagination"]["next_cursor"]
+        assert previous_size_cursor is not None
+        incompatible = await client.get(
+            PATH, params={**params, "cursor": previous_size_cursor}
+        )
+        assert incompatible.status_code == 400
+        assert incompatible.json() == {"code": "invalid_cursor"}
+
+
+@pytest.mark.parametrize("search", [False, True])
 async def test_real_adapter_stops_at_repeated_position_or_empty_batch(
     monkeypatch, search
 ):
