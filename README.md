@@ -39,8 +39,8 @@ O lint executa Oxlint seguido de ESLint; o Oxlint cobre rapidamente as regras su
 
 ### Explore com o backend local
 
-Inicie a API em um terminal. Configure `GLOBALGIVING_API_KEY` somente
-no ambiente do backend antes de iniciar:
+Inicie a API em um terminal. Configure `GLOBALGIVING_API_KEY` conforme
+[a configuração local do backend](#configuração-local):
 
 ```bash
 cd backend
@@ -105,6 +105,30 @@ uv run --locked ruff check --fix .
 uv run --locked ruff format .
 ```
 
+### Configuração local
+
+Em um checkout de desenvolvimento, copie `.env.example` para `.env` na
+**raiz do repositório** e preencha `GLOBALGIVING_API_KEY` no arquivo. Essa
+é a variável necessária para listar, pesquisar e consultar detalhes de projetos.
+O arquivo `.env` é ignorado pelo Git.
+
+Inicie a API em `backend/` com `uv run --locked uvicorn main:app --reload`.
+Durante a inicialização, a aplicação localiza o arquivo a partir de
+`backend/main.py`. Uma variável exportada tem prioridade, inclusive se
+estiver vazia. Depois de alterar a configuração, reinicie o backend.
+
+Em CI e em implantações sem checkout Git, forneça a chave pelo ambiente
+de execução. Se a produção usar um checkout Git, defina
+`KINDRED_LOAD_LOCAL_ENV=0` para desativar a leitura local. No Docker,
+forneça a chave ao contêiner pelo ambiente de execução.
+
+Sem chave, a rota raiz continua disponível e os endpoints de projetos retornam
+`503` com o código `provider_unavailable`. Esse código também pode indicar
+falha de autenticação ou indisponibilidade do provedor. Para diagnosticar,
+confirme a presença da variável no ambiente ou no arquivo da raiz e consulte
+`http://127.0.0.1:8000/api/v1/projects`. Compartilhe somente o status HTTP e
+o código de erro retornado pelo Kindred.
+
 ### Descoberta GlobalGiving (issue #12)
 
 `integrations.globalgiving.GlobalGivingDiscoveryAdapter` implementa a operação
@@ -114,8 +138,8 @@ a consulta detalhada da #13 com o mesmo cliente HTTP.
 A API da #15 reutiliza uma instância por ciclo de vida da aplicação e
 fecha o cliente ao encerrar o FastAPI.
 
-A chave vem exclusivamente de `GLOBALGIVING_API_KEY` no ambiente do backend;
-o adapter não lê `.env` automaticamente. A URL base padrão é HTTPS, o timeout
+O startup do backend resolve `GLOBALGIVING_API_KEY` e passa a chave ao
+provider. A URL base padrão é HTTPS, o timeout
 total e por fase é 10 segundos, a resposta é limitada a 2 MiB e não há retries
 nem redirecionamentos automáticos. HTTPX agora é dependência de execução.
 Logs HTTPX/HTTPcore são suprimidos apenas no contexto dessas chamadas, inclusive
@@ -163,8 +187,7 @@ Consulte `/docs` e o
 `GET /api/v1/projects` lista projetos e `GET /api/v1/projects?q=education`
 faz pesquisa textual. Consulte `/docs` e o
 [contrato de paginação e erros](docs/architecture/architecture.md#11-paginação).
-Configure `GLOBALGIVING_API_KEY` no ambiente do backend. Sem a chave, a
-descoberta retorna 503 e a rota raiz continua disponível.
+Configure `GLOBALGIVING_API_KEY` conforme a [configuração local](#configuração-local).
 
 Os testes de integração usam RESPX com requisições não previstas bloqueadas,
 transportes locais e uma chave fictícia. Não exigem acesso real à GlobalGiving.

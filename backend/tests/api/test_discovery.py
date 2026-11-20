@@ -240,8 +240,8 @@ async def test_lifespan_owns_client_and_cursor_with_real_adapter(monkeypatch):
     class TrackedProvider(GlobalGivingProjectProvider):
         closed = False
 
-        def __init__(self) -> None:
-            super().__init__(transport=httpx.MockTransport(respond))
+        def __init__(self, *, api_key: str) -> None:
+            super().__init__(api_key=api_key, transport=httpx.MockTransport(respond))
             providers.append(self)
 
         async def aclose(self) -> None:

@@ -23,11 +23,14 @@ class GlobalGivingDiscoveryAdapter:
     def __init__(
         self,
         *,
+        api_key: str | None = None,
         base_url: str = "https://api.globalgiving.org/api/public/",
         timeout: float = 10.0,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
-        api_key = os.environ.get("GLOBALGIVING_API_KEY", "").strip()
+        if api_key is None:
+            api_key = os.getenv("GLOBALGIVING_API_KEY", "")
+        api_key = api_key.strip()
         if not api_key:
             raise ValueError("GLOBALGIVING_API_KEY must be configured in the backend")
         self._http = GlobalGivingHTTP(
