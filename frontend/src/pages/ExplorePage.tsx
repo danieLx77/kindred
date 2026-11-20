@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type SubmitEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
 
-import { DiscoveryError, fetchProjects } from "../api/discovery";
+import { KindredApiError, fetchProjects } from "../api/projects";
 import { ProjectResultCard } from "../components/ProjectResultCard";
 import { StateMessage } from "../components/StateMessage";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
@@ -49,7 +49,7 @@ function ExploreResults({ query, cursor, previous, focusResults, openPage }: Exp
         if (!controller.signal.aborted) {
           setResult({
             status: "error",
-            invalidCursor: error instanceof DiscoveryError && error.code === "invalid_cursor",
+            invalidCursor: error instanceof KindredApiError && error.code === "invalid_cursor",
           });
         }
       },

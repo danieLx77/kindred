@@ -1,26 +1,16 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 
-import type { ProjectCard } from "../api/discovery";
+import type { ProjectCard } from "../api/projects";
 import { paths } from "../routes";
-
-function imageSource(value: string | null | undefined) {
-  if (!value) return undefined;
-  try {
-    const url = new URL(value);
-    if ((url.protocol === "https:" || url.protocol === "http:") && !url.username && !url.password) {
-      return url.href;
-    }
-  } catch {
-    return undefined;
-  }
-}
+import { safeExternalUrl } from "../safeExternalUrl";
 
 export function ProjectResultCard({ project }: { project: ProjectCard }) {
   const { t } = useTranslation();
+  const { search, state } = useLocation();
   const [failedSource, setFailedSource] = useState<string>();
-  const image = imageSource(project.image_url);
+  const image = safeExternalUrl(project.image_url);
   const metadata = [project.theme, project.country].filter(Boolean).join(" · ");
 
   return (
@@ -38,7 +28,7 @@ export function ProjectResultCard({ project }: { project: ProjectCard }) {
       </div>
       <div className="explore-card__content">
         <h3>
-          <Link to={paths.project(project.id)}>
+          <Link to={paths.project(project.id)} state={{ explore: { search, state } }}>
             {project.title || t("explore.untitledProject", { id: project.id })}
           </Link>
         </h3>
