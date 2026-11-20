@@ -17,7 +17,7 @@ const full = {
   country: "Brazil",
   region: "Minas Gerais",
   organization: { id: "2", name: "Open School" },
-  image_url: "https://example.test/project.jpg",
+  image_url: "https://example.test/detail-extra-large.jpg",
   activities: "Train local teachers",
   need: "Bring schools closer",
   long_term_impact: "More students graduate",
@@ -87,6 +87,7 @@ describe("Project Detail", () => {
     const main = screen.getByRole("main");
     const image = main.querySelector("img");
     expect(image).toHaveAttribute("src", full.image_url);
+    expect(image).not.toHaveAttribute("loading", "lazy");
     expect(image).toHaveAttribute("alt", "");
     expect(image).toHaveAttribute("referrerpolicy", "no-referrer");
     fireEvent.error(image!);
