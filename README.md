@@ -146,9 +146,11 @@ Logs HTTPX/HTTPcore são suprimidos apenas no contexto dessas chamadas, inclusiv
 leitura e fechamento, para não registrar a chave exigida na query string. O
 cliente próprio não instala hooks de tracing nem usa proxies do ambiente.
 
-Cada consulta de descoberta busca um lote externo de até 10 projetos. `page_size` é um
-limite superior; lotes podem ser menores. Na listagem, lotes menores são retomados
-com a mesma posição externa e um deslocamento interno, sem cache de projetos.
+A API de descoberta aceita `page_size` de 1 a 10, com padrão 10. A Explore solicita
+9 projetos por página. Na listagem, os lotes externos de até 10 projetos são retomados
+com a mesma posição externa e um deslocamento interno. Quando a sobra de um lote não
+preenche a página e há continuação, o adapter busca o próximo lote para completá-la.
+Uma resposta do provedor com menos itens ainda pode produzir uma página parcial.
 Na busca, qualquer lote não vazio permite tentar a próxima posição; apenas uma
 resposta vazia confirma o fim, independentemente de `numberFound`. Isso pode
 exigir uma chamada adicional no final. Não há garantia de snapshot estável.

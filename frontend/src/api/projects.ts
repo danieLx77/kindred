@@ -1,4 +1,5 @@
 export const discoveryPath = "/api/v1/projects";
+const explorePageSize = 9;
 
 interface OrganizationCard {
   id: string;
@@ -95,6 +96,7 @@ async function fetchKindred(url: URL, signal: AbortSignal): Promise<unknown> {
 
 export async function fetchProjects(query: string, cursor: string | null, signal: AbortSignal) {
   const url = new URL(discoveryPath, window.location.origin);
+  url.searchParams.set("page_size", String(explorePageSize));
   if (query) url.searchParams.set("q", query);
   if (cursor !== null) url.searchParams.set("cursor", cursor);
 
