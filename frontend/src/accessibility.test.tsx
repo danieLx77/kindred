@@ -6,12 +6,12 @@ import { renderApp, renderWithProviders } from "./test/renderApp";
 
 describe("pontos de referência e cabeçalhos", () => {
   it.each(["/", "/explore", "/projects/1", "/pagina-inexistente"])(
-    "em %s há um único banner, nav, main, contentinfo e h1",
+    "em %s há um único banner, nav principal, main, contentinfo e h1",
     (route) => {
       renderApp({ route, language: "pt-BR" });
 
       expect(screen.getAllByRole("banner")).toHaveLength(1);
-      expect(screen.getAllByRole("navigation")).toHaveLength(1);
+      expect(screen.getAllByRole("navigation", { name: "Navegação principal" })).toHaveLength(1);
       expect(screen.getAllByRole("main")).toHaveLength(1);
       expect(screen.getAllByRole("contentinfo")).toHaveLength(1);
       expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);

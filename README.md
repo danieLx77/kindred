@@ -37,6 +37,36 @@ npm run test:coverage
 
 O lint executa Oxlint seguido de ESLint; o Oxlint cobre rapidamente as regras suportadas e o ESLint complementa a análise com regras e plugins adicionais. O Oxfmt formata os arquivos. São ferramentas recentes, adotadas para manter verificações locais rápidas sem perder cobertura necessária. Usuários do VS Code também recebem recomendações opcionais de extensão em `.vscode/extensions.json`.
 
+### Explore com o backend local
+
+Inicie a API em um terminal. Configure `GLOBALGIVING_API_KEY` somente
+no ambiente do backend antes de iniciar:
+
+```bash
+cd backend
+uv sync --locked
+uv run --locked uvicorn main:app --host 127.0.0.1 --port 8000
+```
+
+Em outro terminal, inicie o frontend:
+
+```bash
+cd frontend
+npm ci
+npm run dev
+```
+
+Abra `/explore` na URL do Vite. O proxy de desenvolvimento encaminha
+`/api` para `http://127.0.0.1:8000`. Para mudar o destino local,
+defina `KINDRED_API_TARGET` ao iniciar o Vite. O cliente usa caminhos
+relativos no frontend e a chave do provedor permanece no backend.
+
+A busca usa `q` na URL. Ao avançar, o Explore guarda o cursor anterior
+no histórico do navegador. Um link intermediário aberto em outro
+histórico permite voltar à primeira página. Reinícios da API podem
+invalidar cursores, e a interface oferece retorno à primeira página
+preservando a busca.
+
 ## Backend
 
 Sincronize o ambiente com as versões registradas em `uv.lock`:

@@ -33,7 +33,7 @@ describe("seletor de idioma", () => {
     expect(screen.getByRole("navigation", { name: "Main navigation" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Home" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Skip to main content" })).toBeInTheDocument();
-    expect(screen.getByText("Nothing to show here yet.")).toBeInTheDocument(); // estado partilhado
+    expect(await screen.findByText("No projects are available right now.")).toBeInTheDocument(); // estado partilhado
     expect(screen.getByRole("contentinfo")).toHaveTextContent(
       "Project and organization content comes from external sources",
     );
