@@ -7,6 +7,7 @@ from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
+from projects.errors import InvalidDiscoveryContinuation
 from projects.models import DiscoveryQuery
 
 from .discovery_cursor import MAX_CURSOR_LENGTH, InvalidCursor
@@ -120,7 +121,10 @@ async def discover_projects(
         except InvalidCursor:
             return error_response(400, "invalid_cursor")
 
-    result = await services.provider.discover(query, continuation)
+    try:
+        result = await services.provider.discover(query, continuation)
+    except InvalidDiscoveryContinuation:
+        return error_response(400, "invalid_cursor")
 
     next_cursor = None
     if result.continuation is not None:

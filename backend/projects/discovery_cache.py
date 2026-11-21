@@ -140,6 +140,11 @@ class DiscoveryCache(Generic[_Key]):
                 self._hits + self._joins,
             )
 
+    def discard(self, key: _Key) -> None:
+        entry = self._entries.pop(key, None)
+        if entry is not None:
+            self._bytes -= entry.size
+
     async def _load(
         self,
         key: _Key,

@@ -217,6 +217,34 @@ segundos por aba da Explore continua reduzindo requisições ao Kindred.
 Veja o ciclo de vida, as métricas e as limitações de múltiplos workers na
 [documentação de arquitetura](docs/architecture/architecture.md#15-cache).
 
+### Primeira página antecipada da Explore
+
+Defina `KINDRED_EXPLORE_SNAPSHOT_PATH` como um arquivo em um diretório gravável
+e persistente do backend para ativar a geração antecipada. O FastAPI carrega
+um snapshot válido no início e agenda a atualização em segundo plano.
+`KINDRED_EXPLORE_SNAPSHOT_REFRESH_SECONDS` aceita inteiros entre 60 e 1799
+(padrão 600). O limite de idade para servir os cards é de 30 minutos.
+O primeiro acesso em uma instalação sem snapshot usa o fluxo dinâmico previsto
+para o catálogo. A configuração de credenciais permanece no backend.
+
+Para validar a persistência com a imagem de desenvolvimento, construa a imagem
+com as instruções do workflow e exporte `GLOBALGIVING_API_KEY` no terminal.
+Nos reinícios e nas substituições do contêiner, mantenha o mesmo volume nomeado:
+
+```bash
+docker volume create kindred-data
+docker run --rm -p 8000:8000 \
+  --mount type=volume,src=kindred-data,dst=/home/app/kindred-data \
+  -e GLOBALGIVING_API_KEY \
+  -e KINDRED_EXPLORE_SNAPSHOT_PATH=/home/app/kindred-data/explore.json \
+  kindred-backend:dev
+```
+
+Use um único worker e um único escritor para esse volume. Em instalações
+fora do Docker, conceda acesso ao diretório ao usuário que executa o FastAPI.
+Consulte a [decisão da arquitetura](docs/architecture/architecture.md#primeira-página-antecipada-da-explore)
+para os detalhes de paginação, atualização e fallback.
+
 ### Detalhe GlobalGiving (issue #13)
 
 `get_project(id)` recebe um ID textual numérico positivo, consulta diretamente

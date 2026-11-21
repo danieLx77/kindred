@@ -18,8 +18,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PATH="/app/.venv/bin:$PATH"
 
 RUN useradd --uid 10001 --create-home --shell /bin/sh app \
-    && mkdir /app \
-    && chown app:app /app
+    && mkdir /app /home/app/kindred-data \
+    && chown app:app /app /home/app/kindred-data
 
 WORKDIR /app
 USER app
