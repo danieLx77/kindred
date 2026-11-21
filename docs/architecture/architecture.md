@@ -535,14 +535,77 @@ O cache é por processo e complementa o cache por aba da Explore. Reiniciar o
 FastAPI descarta entradas e chaves de cursor. Workers e réplicas independentes
 têm caches e chaves próprios. O MVP usa um único worker para manter a
 continuidade da navegação. O cache não estabelece um snapshot do catálogo e
-páginas podem refletir momentos diferentes dentro do TTL. Uma fase posterior
-poderá adicionar snapshots da primeira página e aquecimento programado.
+páginas podem refletir momentos diferentes dentro do TTL.
 
 O benchmark de descoberta roda com o FastAPI em processo e transporte HTTPX
 simulado. Execute `uv run --locked python discovery_cache_benchmark.py` na
 pasta `backend/`. Para repetir a linha de base, copie o script para fora do
 repositório e execute `PYTHONPATH=. uv run --locked python /caminho/do/script.py
 --baseline` a partir de `backend/` de um checkout anterior ao cache.
+
+### Primeira página antecipada da Explore
+
+| Estratégia | Primeiro acesso | Após reinício | Atualização | Complexidade e operação | Consumo externo | Falhas | Consistência e paginação |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Aquecimento no startup | Aguarda se o usuário chegar antes do aquecimento | Repete a consulta de origem | Uma vez por partida | Um trabalho no lifespan | Uma carga por reinício | Fluxo dinâmico se a carga falhar | Cursores emitidos pelo processo atual |
+| Aquecimento periódico em memória | Rápido depois da primeira carga | Depende de uma nova carga | Intervalo controlado | Uma tarefa por processo | Uma carga por intervalo e processo | Dados disponíveis até o limite em memória | Cursores emitidos pelo processo atual |
+| Snapshot persistente com atualização periódica | Imediato quando há snapshot válido | Reaproveita o arquivo do volume | Intervalo controlado e limite de idade | Arquivo pequeno e volume gravável | Uma carga por intervalo. Reiniciar com snapshot novo adia a carga | Preserva a última versão válida até expirar | Assinatura local e confirmação de ordem na passagem para a segunda página |
+
+O MVP usa um snapshot opcional do backend. O repositório define CI e um
+Dockerfile de desenvolvimento. A hospedagem de produção, o volume de produção
+e o agendamento externo ainda não estão definidos. Um volume Docker nomeado
+ou um diretório persistente permite reutilizar os dados entre contêineres ou
+processos. O Vite constrói o frontend sem credenciais da GlobalGiving e a CI
+usa transportes simulados. Cada instância habilitada tem uma tarefa de
+atualização no lifespan. Use um worker e um escritor por volume.
+
+O arquivo JSON tem esquema versionado, provedor, timestamp, cards públicos e
+um indicador de continuação. A validação rejeita campos desconhecidos,
+registros duplicados, páginas incompletas com continuação, URLs de imagem
+com parâmetros e arquivos acima de 128 KiB. O adaptador mapeia a resposta
+pelas mesmas rotinas de descoberta da Fase 1. A geração escreve em um arquivo
+temporário no mesmo diretório e publica com substituição atômica. O arquivo
+guarda apenas o que é necessário para os cards e omite chaves, URLs
+autenticadas, cursores e posições internas.
+
+A rota pública autentica a continuação vinda do cliente. Para o catálogo
+inicial de nove itens, um snapshot válido prevalece sobre o cache dinâmico.
+No processo atual, o adaptador assina uma continuação que vincula o
+deslocamento ao resumo criptográfico dos IDs ordenados apresentados. Ao
+avançar, a primeira carga do segundo lote confere esses IDs no catálogo,
+consome a sobra do lote atual e segue usando o `nextProjectId` observado na
+mesma leitura. Se os primeiros IDs mudaram, a API retorna o erro
+`400 invalid_cursor`, o backend descarta o snapshot correspondente e a
+Explore permite voltar à primeira página. Uma resposta de página 2 já
+validada pode ser reutilizada no seu TTL por meio do `DiscoveryCache`.
+Depois de um reinício, abrir novamente a primeira página emite um novo
+cursor. A GlobalGiving pode mudar o catálogo entre chamadas e a navegação
+continua sujeita a essas mudanças.
+
+Após ler o arquivo, o FastAPI agenda a primeira atualização para quando o
+snapshot completar o intervalo de atualização, ou imediatamente se faltar
+um arquivo utilizável. Usuários com um snapshot válido recebem os cards
+durante a atualização. Uma carga em andamento e visitantes sem snapshot
+compartilham a mesma operação de descoberta no `DiscoveryCache`. Se a
+atualização falhar, os cards anteriores ficam disponíveis até 1800 segundos
+de idade. Após esse limite, vale o fluxo dinâmico e seus códigos de erro.
+Uma nova tentativa periódica ocorre somente após o intervalo configurado.
+O lifespan cancela e drena a atualização e a carga compartilhada antes de
+fechar o cliente HTTP. O cache de navegação da Explore ainda pode servir uma
+página dentro dos seus 60 segundos próprios.
+
+A GlobalGiving orienta a minimizar chamadas e atualizar dados em cache por
+expiração ou ausência. O intervalo padrão acompanha a duração de 600
+segundos da Fase 1. A janela de 30 minutos é uma decisão do projeto para
+tolerar falhas transitórias. [Código de conduta da API](https://www.globalgiving.org/api/legal/code-of-conduct/)
+e [termos de uso](https://www.globalgiving.org/api/legal/terms-of-service/).
+
+O benchmark usa `uv run --locked python explore_snapshot_benchmark.py` em
+`backend/`. Para medir a base, copie o script para fora do repositório e
+execute `PYTHONPATH=. uv run --locked python /caminho/do/script.py --before`
+em `backend/` do checkout da Fase 1. O transporte de teste simula latências
+e indisponibilidade. Os eventos `explore_snapshot` permitem conferir idade,
+duração de atualização e falhas sem emitir dados de projeto.
 
 ## 16. Tratamento de falhas
 

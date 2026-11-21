@@ -12,6 +12,7 @@ from api.discovery import router as discovery_router
 from api.discovery_cursor import DiscoveryCursors
 from api.project_common import ProjectServices
 from integrations.globalgiving import GlobalGivingProjectProvider
+from integrations.globalgiving.explore_snapshot import ExploreSnapshot
 from projects.discovery_cache import DiscoveryCacheSettings
 from projects.provider import ProjectProvider
 
@@ -61,6 +62,9 @@ def create_app(
         async with GlobalGivingProjectProvider(
             api_key=api_key, cache_settings=DiscoveryCacheSettings.from_env()
         ) as globalgiving:
+            snapshot = ExploreSnapshot.from_env()
+            if snapshot is not None:
+                globalgiving.start_explore_snapshot(snapshot)
             app.state.projects = ProjectServices(globalgiving, cursors)
             yield
 

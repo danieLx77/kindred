@@ -5,9 +5,12 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 import os
+import re
 import secrets
 from dataclasses import replace
+from time import perf_counter, time
 from types import TracebackType
 from typing import TypeVar
 from urllib.parse import urlsplit
@@ -15,7 +18,7 @@ from urllib.parse import urlsplit
 import httpx
 
 from projects.discovery_cache import DiscoveryCache, DiscoveryCacheSettings
-from projects.errors import ProviderError
+from projects.errors import InvalidDiscoveryContinuation, ProviderError
 from projects.models import (
     Continuation,
     DiscoveryQuery,
@@ -23,6 +26,7 @@ from projects.models import (
     ProjectSummary,
 )
 
+from .explore_snapshot import EXPLORE_QUERY, ExploreSnapshot, prefix_digest
 from .http import GlobalGivingHTTP
 from .mapping import (
     card_image_variants,
@@ -32,9 +36,11 @@ from .mapping import (
     summaries,
 )
 
+logger = logging.getLogger(__name__)
 _IMAGE_LOOKUP_TIMEOUT = 2.0
 
-_CacheKey = tuple[DiscoveryQuery, int | None, int, int | None]
+_CacheKey = tuple[DiscoveryQuery, int | None, int, int | None, str | None]
+_EXPLORE_KEY: _CacheKey = (EXPLORE_QUERY, None, 0, None, None)
 
 _DiscoveryAdapterT = TypeVar("_DiscoveryAdapterT", bound="GlobalGivingDiscoveryAdapter")
 
@@ -64,6 +70,36 @@ class GlobalGivingDiscoveryAdapter:
             else None
         )
 
+        self._snapshot: ExploreSnapshot | None = None
+        self._refresh_task: asyncio.Task[None] | None = None
+
+    def start_explore_snapshot(self, snapshot: ExploreSnapshot) -> None:
+        if self._snapshot is not None or self._cache is None:
+            raise RuntimeError("Explore snapshot requires a single discovery cache")
+        snapshot.load()
+        self._snapshot = snapshot
+        self._refresh_task = asyncio.create_task(self._refresh_explore(snapshot))
+
+    async def _refresh_explore(self, snapshot: ExploreSnapshot) -> None:
+        await asyncio.sleep(snapshot.initial_delay())
+        while True:
+            started = perf_counter()
+            try:
+                if self._cache is not None:
+                    self._cache.discard(_EXPLORE_KEY)
+                await self._resolve_page(_EXPLORE_KEY, "")
+            except ProviderError as error:
+                logger.warning(
+                    "explore_snapshot event=refresh_failed reason=%s",
+                    error.reason.value,
+                )
+            finally:
+                logger.debug(
+                    "explore_snapshot event=refresh_finished duration_ms=%.3f",
+                    (perf_counter() - started) * 1000,
+                )
+            await asyncio.sleep(snapshot.refresh_seconds)
+
     async def discover(
         self,
         query: DiscoveryQuery = DiscoveryQuery(),
@@ -77,27 +113,43 @@ class GlobalGivingDiscoveryAdapter:
             raise ValueError("Discovery text must be a string")
         text = (query.text or "").strip()
         searching = bool(text)
-        position, skip, hint = (0 if searching else None), 0, None
+        position, skip, hint, prefix = (0 if searching else None), 0, None, None
         if continuation is not None:
-            position, skip, hint = self._decode(continuation, query)
+            position, skip, hint, prefix = self._decode(continuation, query)
+        elif self._snapshot is not None and query == EXPLORE_QUERY:
+            page = self._snapshot.current()
+            if page is not None:
+                items = page.summaries()
+                next_page = (
+                    self._encode(query, None, len(items), prefix=prefix_digest(items))
+                    if page.has_more
+                    else None
+                )
+                logger.debug(
+                    "explore_snapshot event=hit age_seconds=%.3f",
+                    time() - page.generated_at,
+                )
+                return DiscoveryResult(items, next_page)
+            logger.debug("explore_snapshot event=miss")
+
+        return await self._resolve_page((query, position, skip, hint, prefix), text)
+
+    async def _resolve_page(self, key: _CacheKey, text: str) -> DiscoveryResult:
+        async def load() -> tuple[DiscoveryResult, bool]:
+            result, complete = await self._discover_page(key, text)
+            if complete and key == _EXPLORE_KEY and self._snapshot is not None:
+                await self._snapshot.publish(result)
+            return result, complete
 
         if self._cache is None:
-            result, _ = await self._discover_page(query, text, position, skip, hint)
+            result, _ = await load()
             return result
-
-        return await self._cache.resolve(
-            (query, position, skip, hint),
-            lambda: self._discover_page(query, text, position, skip, hint),
-        )
+        return await self._cache.resolve(key, load)
 
     async def _discover_page(
-        self,
-        query: DiscoveryQuery,
-        text: str,
-        position: int | None,
-        skip: int,
-        hint: int | None,
+        self, key: _CacheKey, text: str
     ) -> tuple[DiscoveryResult, bool]:
+        query, position, skip, hint, prefix = key
         if text:
             assert position is not None
             data = object_value(
@@ -117,12 +169,19 @@ class GlobalGivingDiscoveryAdapter:
             items = summaries(container)[: query.page_size]
             next_page = self._encode(query, position + len(items), 0) if items else None
         else:
-            items, next_page = await self._listing_page(query, position, skip, hint)
+            items, next_page = await self._listing_page(
+                query, position, skip, hint, prefix
+            )
         items, complete = await self._enrich_card_images(items)
         return DiscoveryResult(items, next_page), complete
 
     async def _listing_page(
-        self, query: DiscoveryQuery, position: int | None, skip: int, hint: int | None
+        self,
+        query: DiscoveryQuery,
+        position: int | None,
+        skip: int,
+        hint: int | None,
+        prefix: str | None,
     ) -> tuple[tuple[ProjectSummary, ...], Continuation | None]:
         # The previous response already reported this position. Start the two
         # reads together, but use the second only if the fresh first batch agrees.
@@ -131,8 +190,21 @@ class GlobalGivingDiscoveryAdapter:
         )
         try:
             projects, next_position = await self._listing_batch(position)
-            if skip and skip >= len(projects):
+            if prefix is not None:
+                if len(projects) < skip or prefix_digest(projects[:skip]) != prefix:
+                    if self._snapshot is not None and await self._snapshot.discard(
+                        prefix
+                    ):
+                        if self._cache is not None:
+                            self._cache.discard(_EXPLORE_KEY)
+                    raise InvalidDiscoveryContinuation
+            elif skip and skip >= len(projects):
                 raise invalid_response()
+            preceding = (
+                {project.id for project in projects[:skip]}
+                if prefix is not None
+                else set()
+            )
             items = projects[skip : skip + query.page_size]
             consumed = skip + len(items)
             if skip and len(items) < query.page_size and next_position is not None:
@@ -148,6 +220,9 @@ class GlobalGivingDiscoveryAdapter:
                 items += projects[:consumed]
                 if len({item.id for item in items}) != len(items):
                     raise invalid_response()
+
+            if any(item.id in preceding for item in items):
+                raise invalid_response()
 
             next_page = None
             if consumed < len(projects):
@@ -230,14 +305,18 @@ class GlobalGivingDiscoveryAdapter:
         position: int | None,
         skip: int,
         hint: int | None = None,
+        *,
+        prefix: str | None = None,
     ) -> Continuation:
-        payload = json.dumps([self._query_key(query), position, skip, hint]).encode()
+        payload = json.dumps(
+            [self._query_key(query), position, skip, hint, prefix]
+        ).encode()
         signature = hmac.digest(self._signing_key, payload, "sha256")
         return Continuation(base64.urlsafe_b64encode(signature + payload).decode())
 
     def _decode(
         self, continuation: Continuation, query: DiscoveryQuery
-    ) -> tuple[int | None, int, int | None]:
+    ) -> tuple[int | None, int, int | None, str | None]:
         try:
             if (
                 not isinstance(continuation.token, str)
@@ -252,7 +331,7 @@ class GlobalGivingDiscoveryAdapter:
                 signature, hmac.digest(self._signing_key, payload, "sha256")
             ):
                 raise ValueError
-            key, position, skip, hint = json.loads(payload)
+            key, position, skip, hint, prefix = json.loads(payload)
             if key != self._query_key(query):
                 raise ValueError
             searching = bool((query.text or "").strip())
@@ -271,7 +350,16 @@ class GlobalGivingDiscoveryAdapter:
                 or hint <= (position or 0)
             ):
                 raise ValueError
-            return position, skip, hint
+            if prefix is not None and (
+                query != EXPLORE_QUERY
+                or position is not None
+                or skip != query.page_size
+                or hint is not None
+                or not isinstance(prefix, str)
+                or not re.fullmatch(r"[0-9a-f]{64}", prefix)
+            ):
+                raise ValueError
+            return position, skip, hint, prefix
         except (ValueError, TypeError):
             raise ValueError(
                 "Invalid discovery continuation for this query/provider"
@@ -279,6 +367,9 @@ class GlobalGivingDiscoveryAdapter:
 
     async def aclose(self) -> None:
         try:
+            if self._refresh_task is not None:
+                self._refresh_task.cancel()
+                await asyncio.gather(self._refresh_task, return_exceptions=True)
             if self._cache is not None:
                 await self._cache.aclose()
         finally:

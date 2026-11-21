@@ -18,3 +18,7 @@ class ProviderError(Exception):
     def __init__(self, reason: ProviderFailure) -> None:
         self.reason = reason
         super().__init__(f"Project provider failure: {reason.value}")
+
+
+class InvalidDiscoveryContinuation(ValueError):
+    """A previously valid catalog continuation no longer matches the catalog."""
