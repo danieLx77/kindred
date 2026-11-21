@@ -173,6 +173,13 @@ Quando a resposta entrega apenas a miniatura padrão, o adapter pode buscar
 variantes em uma única consulta adicional para os projetos da página exibida.
 Essa consulta tem limite de 2 segundos e preserva as miniaturas se falhar.
 
+Quando uma página precisa usar dois lotes do catálogo e a continuação anterior
+já informou o segundo lote, as duas consultas são iniciadas em paralelo. O
+adapter confirma a posição com a resposta atual antes de usar o segundo lote.
+Na busca textual, um timeout permite uma única nova tentativa no tempo restante
+do orçamento original de 10 segundos. O adapter reserva 20% desse orçamento
+para a nova tentativa e respeita respostas de limite de taxa sem repeti-las.
+
 As continuações são estado interno assinado, vinculado à consulta e à instância,
 sem armazenamento de páginas. Permitem replay enquanto a instância existir;
 reinício ou outra instância invalida o handle. A assinatura impede adulteração,

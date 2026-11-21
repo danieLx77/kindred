@@ -113,6 +113,68 @@ async def test_listing_small_pages_eventually_use_provider_cursor(
     assert route.calls[2].request.url.params["nextProjectId"] == "3"
 
 
+@pytest.mark.parametrize("provider_cursor_changed", [False, True])
+async def test_split_listing_overlaps_reads_and_uses_the_fresh_cursor(
+    provider_cursor_changed: bool,
+) -> None:
+    second_read_started = asyncio.Event()
+    calls: list[str | None] = []
+    second_position = "12" if provider_cursor_changed else "11"
+
+    async def respond(request: httpx.Request) -> httpx.Response:
+        position = request.url.params.get("nextProjectId")
+        calls.append(position)
+        if position is None:
+            if len(calls) == 1:
+                return httpx.Response(
+                    200,
+                    json=listing(
+                        [{"id": i} for i in range(1, 11)],
+                        hasNext=True,
+                        nextProjectId=11,
+                    ),
+                )
+            await asyncio.wait_for(second_read_started.wait(), timeout=1)
+            return httpx.Response(
+                200,
+                json=listing(
+                    [{"id": i} for i in range(1, 11)],
+                    hasNext=True,
+                    nextProjectId=int(second_position),
+                ),
+            )
+        if position == "11":
+            second_read_started.set()
+        if provider_cursor_changed and position == "11":
+            return httpx.Response(503)
+        return httpx.Response(
+            200, json=listing([{"id": i} for i in range(int(position), 21)])
+        )
+
+    async with GlobalGivingDiscoveryAdapter(
+        api_key=KEY, transport=httpx.MockTransport(respond)
+    ) as instance:
+        query = DiscoveryQuery(page_size=9)
+        first = await instance.discover(query)
+        assert calls == [None]
+        assert first.continuation is not None
+        second = await instance.discover(query, first.continuation)
+        third = await instance.discover(query, second.continuation)
+
+    assert [item.id for item in first.items] == [str(i) for i in range(1, 10)]
+    assert [item.id for item in second.items] == [
+        "10",
+        *(str(i) for i in range(int(second_position), int(second_position) + 8)),
+    ]
+    assert [item.id for item in third.items] == [
+        str(i) for i in range(int(second_position) + 8, 21)
+    ]
+    assert third.continuation is None
+    assert calls.count(None) == 2
+    assert calls.count("11") == (1 if provider_cursor_changed else 2)
+    assert calls.count("12") == (2 if provider_cursor_changed else 0)
+
+
 async def test_large_page_size_is_upper_bound_not_bulk_fetch(
     adapter, globalgiving_environment
 ) -> None:
@@ -288,6 +350,56 @@ async def test_search_small_page_advances_by_consumed_items(
     second = await adapter.discover(query, first.continuation)
     assert [first.items[0].id, second.items[0].id] == ["1", "2"]
     assert route.calls.last.request.url.params["start"] == "1"
+
+
+@pytest.mark.parametrize("status", [504, 429])
+async def test_search_retries_timeout_but_respects_rate_limits(
+    adapter, globalgiving_environment, status, caplog
+) -> None:
+    route = globalgiving_environment.get(SEARCH).mock(
+        side_effect=[
+            httpx.Response(status, text=KEY),
+            httpx.Response(200, json=search({"id": 7})),
+        ]
+    )
+    query = DiscoveryQuery(text="water", page_size=9)
+    with caplog.at_level(logging.DEBUG):
+        if status == 429:
+            with pytest.raises(ProviderError) as error:
+                await adapter.discover(query)
+            assert error.value.reason == ProviderFailure.RATE_LIMITED
+            assert route.call_count == 1
+        else:
+            result = await adapter.discover(query)
+            assert result.items == (ProjectSummary(id="7"),)
+            assert route.call_count == 2
+            assert route.calls[0].request.url == route.calls[1].request.url
+    assert KEY not in caplog.text
+
+
+@pytest.mark.parametrize("recovers", [True, False])
+async def test_search_retries_within_the_original_deadline(recovers: bool) -> None:
+    calls = 0
+
+    async def respond(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if calls == 1 or not recovers:
+            await asyncio.Event().wait()
+        return httpx.Response(200, json=search({"id": 7}))
+
+    async with GlobalGivingDiscoveryAdapter(
+        api_key=KEY, timeout=0.2, transport=httpx.MockTransport(respond)
+    ) as instance:
+        query = DiscoveryQuery(text="water")
+        if recovers:
+            result = await asyncio.wait_for(instance.discover(query), timeout=1)
+            assert result.items == (ProjectSummary(id="7"),)
+        else:
+            with pytest.raises(ProviderError) as error:
+                await asyncio.wait_for(instance.discover(query), timeout=1)
+            assert error.value.reason is ProviderFailure.TIMEOUT
+    assert calls == 2
 
 
 @pytest.mark.parametrize(
