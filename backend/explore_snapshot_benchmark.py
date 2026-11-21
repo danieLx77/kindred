@@ -46,12 +46,15 @@ class CacheEvents(logging.Handler):
     def __init__(self) -> None:
         super().__init__()
         self.counts: Counter[str] = Counter()
+        self.snapshot_age: list[float] = []
 
     def emit(self, record: logging.LogRecord) -> None:
         message = record.getMessage()
         if " event=" in message:
             source, event = message.split()[:2]
             self.counts[f"{source}.{event.removeprefix('event=')}"] += 1
+            if source == "explore_snapshot" and event == "event=hit":
+                self.snapshot_age.append(float(message.rsplit("=", 1)[-1]))
 
 
 async def main_bench():
@@ -59,7 +62,11 @@ async def main_bench():
     if baseline and find_spec("integrations.globalgiving.explore_snapshot") is not None:
         raise SystemExit("Run --before from the Phase 1 checkout.")
     events = CacheEvents()
-    for name in ("projects.discovery_cache", "integrations.globalgiving.discovery"):
+    for name in (
+        "projects.discovery_cache",
+        "integrations.globalgiving.discovery",
+        "integrations.globalgiving.explore_snapshot",
+    ):
         logger = logging.getLogger(name)
         logger.addHandler(events)
         logger.setLevel(logging.DEBUG)
@@ -80,6 +87,7 @@ async def main_bench():
     ):
         rows = []
         sampled_events: Counter[str] = Counter()
+        sampled_age: list[float] = []
         for attempt in range(8):
             with tempfile.TemporaryDirectory() as directory:
                 path = Path(directory) / "first.json"
@@ -138,12 +146,13 @@ async def main_bench():
                         upstream.delay = 0.350
                     upstream.unavailable = scenario == "down"
                     before = upstream.calls
+                    events.counts.clear()
                     async with client() as session:
                         if scenario == "available" and not baseline:
                             update_start = perf_counter()
 
                             async def wait_for_snapshot():
-                                while not path.exists():
+                                while not events.counts["explore_snapshot.updated"]:
                                     await asyncio.sleep(0.001)
 
                             await asyncio.wait_for(wait_for_snapshot(), 3)
@@ -165,6 +174,7 @@ async def main_bench():
                                     0.075, upstream.wait.set
                                 )
                         events.counts.clear()
+                        events.snapshot_age.clear()
                         start = perf_counter()
                         response = await get(session)
                         first_ms = (perf_counter() - start) * 1000
@@ -187,6 +197,7 @@ async def main_bench():
                         if attempt:
                             rows.append((round(elapsed, 2), calls, round(first_ms, 2)))
                             sampled_events.update(events.counts)
+                            sampled_age.extend(events.snapshot_age)
                         if concurrent is not None:
                             assert (await concurrent).is_success
                     if upstream.wait is not None:
@@ -197,6 +208,9 @@ async def main_bench():
             "calls": sorted(set(calls)),
             "first_ms": median(first),
             "cache_events_in_seven_samples": dict(sampled_events),
+            "snapshot_age_seconds": [min(sampled_age), max(sampled_age)]
+            if sampled_age
+            else [],
         }
     if not baseline:
         from integrations.globalgiving import explore_snapshot
