@@ -14,6 +14,7 @@ from urllib.parse import urlsplit
 
 import httpx
 
+from projects.discovery_cache import DiscoveryCache, DiscoveryCacheSettings
 from projects.errors import ProviderError
 from projects.models import (
     Continuation,
@@ -33,6 +34,8 @@ from .mapping import (
 
 _IMAGE_LOOKUP_TIMEOUT = 2.0
 
+_CacheKey = tuple[DiscoveryQuery, int | None, int, int | None]
+
 _DiscoveryAdapterT = TypeVar("_DiscoveryAdapterT", bound="GlobalGivingDiscoveryAdapter")
 
 
@@ -44,6 +47,7 @@ class GlobalGivingDiscoveryAdapter:
         base_url: str = "https://api.globalgiving.org/api/public/",
         timeout: float = 10.0,
         transport: httpx.AsyncBaseTransport | None = None,
+        cache_settings: DiscoveryCacheSettings | None = None,
     ) -> None:
         if api_key is None:
             api_key = os.getenv("GLOBALGIVING_API_KEY", "")
@@ -54,6 +58,11 @@ class GlobalGivingDiscoveryAdapter:
             api_key, base_url=base_url, timeout=timeout, transport=transport
         )
         self._signing_key = secrets.token_bytes(32)
+        self._cache = (
+            DiscoveryCache[_CacheKey](cache_settings)
+            if cache_settings is not None
+            else None
+        )
 
     async def discover(
         self,
@@ -72,7 +81,24 @@ class GlobalGivingDiscoveryAdapter:
         if continuation is not None:
             position, skip, hint = self._decode(continuation, query)
 
-        if searching:
+        if self._cache is None:
+            result, _ = await self._discover_page(query, text, position, skip, hint)
+            return result
+
+        return await self._cache.resolve(
+            (query, position, skip, hint),
+            lambda: self._discover_page(query, text, position, skip, hint),
+        )
+
+    async def _discover_page(
+        self,
+        query: DiscoveryQuery,
+        text: str,
+        position: int | None,
+        skip: int,
+        hint: int | None,
+    ) -> tuple[DiscoveryResult, bool]:
+        if text:
             assert position is not None
             data = object_value(
                 await self._http.get(
@@ -92,7 +118,8 @@ class GlobalGivingDiscoveryAdapter:
             next_page = self._encode(query, position + len(items), 0) if items else None
         else:
             items, next_page = await self._listing_page(query, position, skip, hint)
-        return DiscoveryResult(await self._enrich_card_images(items), next_page)
+        items, complete = await self._enrich_card_images(items)
+        return DiscoveryResult(items, next_page), complete
 
     async def _listing_page(
         self, query: DiscoveryQuery, position: int | None, skip: int, hint: int | None
@@ -166,10 +193,10 @@ class GlobalGivingDiscoveryAdapter:
 
     async def _enrich_card_images(
         self, items: tuple[ProjectSummary, ...]
-    ) -> tuple[ProjectSummary, ...]:
+    ) -> tuple[tuple[ProjectSummary, ...], bool]:
         pending = [project.id for project in items if _uses_default_image(project)]
         if not pending:
-            return items
+            return items, True
 
         # The full-project collection supplies official variants for up to 10 IDs.
         # This optional request must not delay discovery by another full API timeout.
@@ -183,14 +210,14 @@ class GlobalGivingDiscoveryAdapter:
             )
             images = card_image_variants(payload)
         except (ProviderError, asyncio.TimeoutError):
-            return items
+            return items, False
 
         return tuple(
             replace(project, image_url=images[project.id])
             if project.id in pending and project.id in images
             else project
             for project in items
-        )
+        ), True
 
     @staticmethod
     def _query_key(query: DiscoveryQuery) -> str:
@@ -251,7 +278,11 @@ class GlobalGivingDiscoveryAdapter:
             ) from None
 
     async def aclose(self) -> None:
-        await self._http.aclose()
+        try:
+            if self._cache is not None:
+                await self._cache.aclose()
+        finally:
+            await self._http.aclose()
 
     async def __aenter__(self: _DiscoveryAdapterT) -> _DiscoveryAdapterT:
         return self

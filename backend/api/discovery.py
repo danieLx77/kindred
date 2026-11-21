@@ -1,5 +1,6 @@
 """HTTP contract for Kindred project discovery."""
 
+import logging
 from typing import Annotated, ClassVar, Literal
 
 from fastapi import APIRouter, Query, Request
@@ -17,6 +18,20 @@ from .project_common import (
     project_card,
     project_services,
 )
+
+
+class _DiscoveryAccessLogFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        # Uvicorn access records include the raw URL query by default.
+        args = record.args
+        if isinstance(args, tuple) and len(args) == 5 and isinstance(args[2], str):
+            path, _, _ = args[2].partition("?")
+            if path.rstrip("/").endswith("/api/v1/projects"):
+                record.args = (*args[:2], path, *args[3:])
+        return True
+
+
+logging.getLogger("uvicorn.access").addFilter(_DiscoveryAccessLogFilter())
 
 
 class DiscoveryParameters(BaseModel):
