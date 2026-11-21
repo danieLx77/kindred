@@ -11,6 +11,8 @@ import httpx
 
 from projects.errors import ProviderError, ProviderFailure
 
+logger = logging.getLogger(__name__)
+
 _sensitive_request: ContextVar[bool] = ContextVar("globalgiving_request", default=False)
 
 
@@ -111,6 +113,7 @@ class GlobalGivingHTTP:
             raise ProviderError(ProviderFailure.INVALID_RESPONSE) from None
 
     async def _get(self, path: str, params: dict[str, str]) -> object:
+        logger.debug("globalgiving_http event=upstream_attempt")
         async with self._client.stream(
             "GET", path, params={**params, "api_key": self._api_key}
         ) as response:

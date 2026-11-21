@@ -8,6 +8,7 @@ from fastapi import FastAPI
 
 from integrations.globalgiving import GlobalGivingProjectProvider
 from main import create_app
+from projects.discovery_cache import DiscoveryCacheSettings
 from projects.errors import ProviderError, ProviderFailure
 from projects.fake import FakeProjectProvider
 from projects.models import (
@@ -240,8 +241,14 @@ async def test_lifespan_owns_client_and_cursor_with_real_adapter(monkeypatch):
     class TrackedProvider(GlobalGivingProjectProvider):
         closed = False
 
-        def __init__(self, *, api_key: str) -> None:
-            super().__init__(api_key=api_key, transport=httpx.MockTransport(respond))
+        def __init__(
+            self, *, api_key: str, cache_settings: DiscoveryCacheSettings
+        ) -> None:
+            super().__init__(
+                api_key=api_key,
+                cache_settings=cache_settings,
+                transport=httpx.MockTransport(respond),
+            )
             providers.append(self)
 
         async def aclose(self) -> None:

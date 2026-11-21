@@ -8,6 +8,7 @@ from uvicorn import Config
 
 import main
 from integrations.globalgiving import GlobalGivingProjectProvider
+from projects.discovery_cache import DiscoveryCacheSettings
 
 KEY = "GLOBALGIVING_API_KEY"
 LOCAL_KEY = "local-fixture-key"
@@ -72,9 +73,15 @@ async def test_startup_configures_real_provider(
         return httpx.Response(200, json={"projects": {"project": [{"id": 42}]}})
 
     class TestProvider(GlobalGivingProjectProvider):
-        def __init__(self, *, api_key: str) -> None:
+        def __init__(
+            self, *, api_key: str, cache_settings: DiscoveryCacheSettings
+        ) -> None:
             constructed.append(api_key)
-            super().__init__(api_key=api_key, transport=httpx.MockTransport(respond))
+            super().__init__(
+                api_key=api_key,
+                transport=httpx.MockTransport(respond),
+                cache_settings=cache_settings,
+            )
 
     monkeypatch.setattr(main, "GlobalGivingProjectProvider", TestProvider)
     caplog.set_level(logging.DEBUG)

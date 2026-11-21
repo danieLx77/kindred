@@ -3,6 +3,7 @@
 import logging
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
+from time import perf_counter
 from typing import Any, Literal, cast
 
 from fastapi import Request
@@ -60,6 +61,7 @@ class ProjectRoute(APIRoute):
         handler = super().get_route_handler()
 
         async def handle(request: Request) -> Response:
+            started = perf_counter()
             try:
                 return await handler(request)
             except RequestValidationError:
@@ -69,6 +71,12 @@ class ProjectRoute(APIRoute):
             except Exception:
                 logger.error("Unexpected project API failure")
                 return error_response(500, "internal_error")
+            finally:
+                logger.debug(
+                    "project_api route=%s response_ms=%.3f",
+                    self.name,
+                    (perf_counter() - started) * 1000,
+                )
 
         return handle
 

@@ -402,7 +402,9 @@ e tamanho de lote. O Explore (#17) guarda os cursores públicos usados em cada
 posição e reapresenta o anterior para voltar. A primeira página é
 representada pela ausência de cursor. Ao mudar texto ou tamanho de lote,
 reinicie a navegação. A posição é relativa à sequência percorrida e o
-retorno a uma página consulta novamente o catálogo, que pode ter mudado.
+retorno a uma página pode reutilizar o cache do backend. O catálogo pode
+mudar entre consultas e diferentes páginas podem ter sido obtidas em
+momentos diferentes.
 
 O [contrato de descoberta](project-provider-contract.md) fornece a
 continuação interna. A API a encapsula com criptografia autenticada, vinculada
@@ -489,16 +491,58 @@ A introdução de persistência exigirá revisão arquitetural e ADR.
 
 ## 15. Cache
 
-Não haverá cache distribuído inicialmente.
+Cada ciclo de vida do FastAPI cria um `GlobalGivingProjectProvider` com um
+cliente HTTP e um `DiscoveryCache` próprios. O cache atende apenas à descoberta
+pública. A API autentica o cursor público e o adaptador valida a assinatura e
+a vinculação da continuação interna antes de acessar o cache. A chave combina a
+`DiscoveryQuery` completa (incluindo texto já normalizado pela API e tamanho de
+página) com posição, deslocamento e indicação do próximo lote. Cada instância
+tem credencial, URL e chaves de assinatura próprias, por isso esses dados não
+entram na chave. A API emite um novo cursor público encapsulando a continuação
+armazenada, quando houver.
 
-A necessidade deverá ser avaliada com base em:
-- latência;
-- limites do provedor;
-- volume;
-- disponibilidade;
-- custo operacional.
+O cache guarda `DiscoveryResult` imutáveis com os projetos em ordem, variantes
+de imagem e continuação interna, incluindo respostas vazias válidas. O TTL
+padrão é 600 segundos a partir da conclusão, sem renovação por acesso.
+Entradas vencidas são removidas quando consultadas ou removidas pela política
+de limite. Os limites são 256 entradas por padrão e aproximadamente 16 MiB
+de objetos retidos por instância. A política LRU remove primeiro a entrada
+usada há mais tempo e resultados individuais acima do orçamento são retornados
+sem armazenamento. A estimativa não representa a memória total do processo.
+As configurações de TTL e capacidade estão no [README](../../README.md#cache-de-descoberta-no-backend).
 
-Caso necessário, poderão ser avaliados cache em memória e posteriormente soluções distribuídas.
+Cada chave em falta tem uma operação compartilhada com `asyncio.shield`.
+Chaves distintas podem executar em paralelo, com até 256 cargas ativas por
+cache. Cancelar o consumidor não cancela a carga. No encerramento, o adaptador
+cancela e aguarda as cargas antes de fechar o cliente HTTP. Falhas são
+propagadas aos consumidores atuais e a próxima requisição pode tentar de
+novo. Falhas na consulta opcional de imagens continuam retornando o card
+com a imagem disponível, sem reaproveitar esse resultado em acessos futuros.
+Em hits, o backend evita as chamadas de catálogo, busca ou imagens daquela
+página. Em misses, continuam valendo a sobreposição de lotes e a recuperação
+de timeout da busca.
+
+Os logs em nível DEBUG registram eventos de cache, contadores acumulados de
+hits, misses, expirações, remoções e junções, totais de entradas e operações
+ativas, bytes estimados e tempos de resolução e de resposta da API.
+`provider_operations_avoided` soma hits e junções. Uma operação evitada pode
+corresponder a várias chamadas HTTP. O evento `upstream_attempt` registra cada
+tentativa HTTP separadamente, inclusive retries. Os eventos omitem chaves do
+cache, parâmetros e dados de projetos. O log de acesso do Uvicorn omite a
+query string da rota de descoberta.
+
+O cache é por processo e complementa o cache por aba da Explore. Reiniciar o
+FastAPI descarta entradas e chaves de cursor. Workers e réplicas independentes
+têm caches e chaves próprios. O MVP usa um único worker para manter a
+continuidade da navegação. O cache não estabelece um snapshot do catálogo e
+páginas podem refletir momentos diferentes dentro do TTL. Uma fase posterior
+poderá adicionar snapshots da primeira página e aquecimento programado.
+
+O benchmark de descoberta roda com o FastAPI em processo e transporte HTTPX
+simulado. Execute `uv run --locked python discovery_cache_benchmark.py` na
+pasta `backend/`. Para repetir a linha de base, copie o script para fora do
+repositório e execute `PYTHONPATH=. uv run --locked python /caminho/do/script.py
+--baseline` a partir de `backend/` de um checkout anterior ao cache.
 
 ## 16. Tratamento de falhas
 
@@ -626,7 +670,7 @@ Ainda deverão ser avaliados:
 - hospedagem frontend/backend;
 - estratégia de error tracking;
 - metas quantitativas de performance;
-- eventual cache.
+- cache compartilhado de descoberta por processo.
 
 Essas escolhas não devem ser realizadas apenas por popularidade; devem considerar requisitos, complexidade e trade-offs.
 

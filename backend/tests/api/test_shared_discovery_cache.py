@@ -1,0 +1,359 @@
+import asyncio
+import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
+import httpx
+import pytest
+from fastapi import FastAPI
+
+import main
+from integrations.globalgiving import GlobalGivingProjectProvider
+from projects.models import Continuation
+
+PATH = "/api/v1/projects"
+KEY = "discovery-cache-test-credential"
+
+
+def project(identifier: int, *, image: bool = False) -> dict:
+    value = {"id": identifier, "title": f"Projeto {identifier}"}
+    if image:
+        value["imageLink"] = f"https://www.globalgiving.org/pfil/{identifier}/pict.jpg"
+    return value
+
+
+class GlobalGivingStub:
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+        self.failure: int | str | None = None
+        self.timeout_once = False
+        self.image_failure = False
+        self.uses_images = False
+        self.started = asyncio.Event()
+        self.release: asyncio.Event | None = None
+        self.closed = 0
+        self.cancelled = asyncio.Event()
+
+    async def respond(self, request: httpx.Request) -> httpx.Response:
+        path, params = request.url.path, request.url.params
+        self.calls.append(path.rsplit("/", 1)[-1])
+        assert params["api_key"] == KEY
+        self.started.set()
+        if self.release is not None:
+            try:
+                await self.release.wait()
+            except asyncio.CancelledError:
+                self.cancelled.set()
+                raise
+        if self.timeout_once or self.failure == "timeout":
+            self.timeout_once = False
+            raise httpx.ReadTimeout("fixture", request=request)
+        if isinstance(self.failure, int):
+            return httpx.Response(self.failure)
+        if self.failure == "invalid":
+            return httpx.Response(200, json={"unexpected": True})
+        if path.endswith("/collection/ids"):
+            if self.image_failure:
+                return httpx.Response(503)
+            items = [
+                {
+                    "id": int(value),
+                    "image": {
+                        "imagelink": {
+                            "@size": "large",
+                            "url": "https://img.example.org/card.jpg",
+                        }
+                    },
+                }
+                for value in params["projectIds"].split(",")
+            ]
+            return httpx.Response(200, json={"projects": {"project": items}})
+        if path.endswith("/search/projects"):
+            start = int(params["start"])
+            matches = {
+                "Água limpa": range(101, 122),
+                "água limpa": range(201, 210),
+            }.get(params["q"], range(0))
+            items = [
+                project(i, image=self.uses_images) for i in matches[start : start + 10]
+            ]
+            return httpx.Response(
+                200,
+                json={
+                    "search": {
+                        "response": {"@start": start, "projects": {"project": items}}
+                    }
+                },
+            )
+        start = int(params.get("nextProjectId", "1"))
+        batch: dict[str, object] = {
+            "project": [
+                project(i, image=self.uses_images)
+                for i in range(start, min(start + 10, 22))
+            ]
+        }
+        if start + 10 < 22:
+            batch.update(hasNext=True, nextProjectId=start + 10)
+        return httpx.Response(200, json={"projects": batch})
+
+
+@pytest.fixture
+def upstream(monkeypatch):
+    stub = GlobalGivingStub()
+
+    class Transport(httpx.MockTransport):
+        async def aclose(self) -> None:
+            if stub.release is not None and not stub.release.is_set():
+                assert stub.cancelled.is_set()
+            stub.closed += 1
+
+    def factory(**kwargs):
+        return GlobalGivingProjectProvider(transport=Transport(stub.respond), **kwargs)
+
+    monkeypatch.setattr(main, "GlobalGivingProjectProvider", factory)
+    monkeypatch.setenv("GLOBALGIVING_API_KEY", KEY)
+    monkeypatch.setenv("KINDRED_DISCOVERY_CACHE_TTL_SECONDS", "600")
+    monkeypatch.setenv("KINDRED_DISCOVERY_CACHE_MAX_ENTRIES", "256")
+    return stub
+
+
+@asynccontextmanager
+async def client_for(app: FastAPI) -> AsyncIterator[httpx.AsyncClient]:
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        yield client
+
+
+@pytest.mark.parametrize("query,first_id", [("", 1), ("Água limpa", 101)])
+async def test_pages_shared_across_clients_with_fresh_authenticated_public_cursors(
+    upstream, query, first_id
+):
+    app = main.create_app()
+    params = {"q": query, "page_size": "9"}
+    async with (
+        app.router.lifespan_context(app),
+        client_for(app) as one,
+        client_for(app) as two,
+    ):
+        initial = (await one.get(PATH, params=params)).json()
+        first_calls = len(upstream.calls)
+        same = (
+            await two.get(
+                PATH, params={**params, "q": f"  {query.replace(' ', '   ')}  "}
+            )
+        ).json()
+        assert initial["items"] == same["items"]
+        assert initial["pagination"]["next_cursor"] != same["pagination"]["next_cursor"]
+        assert len(upstream.calls) == first_calls
+
+        cursor = initial["pagination"]["next_cursor"]
+        second_params = {**params, "cursor": cursor}
+        second = (await one.get(PATH, params=second_params)).json()
+        second_calls = len(upstream.calls)
+        replay = (
+            await two.get(
+                PATH, params={**params, "cursor": same["pagination"]["next_cursor"]}
+            )
+        ).json()
+        assert replay["items"] == second["items"]
+        assert replay["pagination"]["page"] == 2
+        assert len(upstream.calls) == second_calls
+
+        for invalid in (
+            {**second_params, "cursor": "malformed"},
+            {**second_params, "page_size": "8"},
+            {**second_params, "q": "different"},
+        ):
+            response = await two.get(PATH, params=invalid)
+            assert response.status_code == 400
+            assert response.json() == {"code": "invalid_cursor"}
+        assert len(upstream.calls) == second_calls
+
+        third = (
+            await one.get(
+                PATH, params={**params, "cursor": second["pagination"]["next_cursor"]}
+            )
+        ).json()
+        assert [len(page["items"]) for page in (initial, second, third)] == [9, 9, 3]
+        assert third["pagination"]["page"] == 3
+        assert [
+            int(item["id"])
+            for page in (initial, second, third)
+            for item in page["items"]
+        ] == list(range(first_id, first_id + 21))
+        if query:
+            end = (
+                await two.get(
+                    PATH,
+                    params={**params, "cursor": third["pagination"]["next_cursor"]},
+                )
+            ).json()
+            assert end["items"] == []
+            assert end["pagination"]["next_cursor"] is None
+        else:
+            assert third["pagination"]["next_cursor"] is None
+
+
+async def test_search_and_page_size_are_isolated_and_valid_empty_is_cached(upstream):
+    app = main.create_app()
+    async with app.router.lifespan_context(app), client_for(app) as client:
+        for query, size, expected in (
+            ("", 2, ["1", "2"]),
+            ("", 1, ["1"]),
+            ("Água limpa", 2, ["101", "102"]),
+            ("água limpa", 2, ["201", "202"]),
+            ("missing", 2, []),
+        ):
+            calls = len(upstream.calls)
+            for _ in range(2):
+                response = await client.get(
+                    PATH, params={"page_size": size, "q": query}
+                )
+                assert response.status_code == 200
+                assert [item["id"] for item in response.json()["items"]] == expected
+            assert len(upstream.calls) == calls + 1
+
+
+async def test_concurrent_http_clients_share_one_operation(upstream, caplog):
+    upstream.release = asyncio.Event()
+    caplog.set_level(logging.DEBUG)
+    app = main.create_app()
+    async with (
+        app.router.lifespan_context(app),
+        client_for(app) as one,
+        client_for(app) as two,
+    ):
+        group = asyncio.gather(
+            *(
+                client.get(PATH, params={"q": "Água limpa", "page_size": 9})
+                for client in [one, two] * 5
+            )
+        )
+        await upstream.started.wait()
+        upstream.release.set()
+        responses = await group
+        assert upstream.calls == ["projects"]
+    assert all(response.status_code == 200 for response in responses)
+    assert "joins=9" in caplog.text
+    assert "provider_operations_avoided=9" in caplog.text
+    assert KEY not in caplog.text
+    assert "Água limpa" not in caplog.text
+    # The ASGI test client logs its own outgoing requests in the same process.
+    server_messages = [
+        record.getMessage() for record in caplog.records if record.name != "httpx"
+    ]
+    assert all("%C3%81gua" not in message for message in server_messages)
+
+
+@pytest.mark.parametrize(
+    "failure,code,status",
+    [
+        ("timeout", "provider_timeout", 504),
+        (429, "provider_rate_limited", 503),
+        (403, "provider_unavailable", 503),
+        ("invalid", "provider_failure", 502),
+    ],
+)
+async def test_upstream_failures_are_mapped_and_retried_by_subsequent_requests(
+    upstream, failure, code, status
+):
+    upstream.failure = failure
+    app = main.create_app()
+    async with app.router.lifespan_context(app), client_for(app) as client:
+        for _ in range(2):
+            response = await client.get(PATH)
+            assert response.status_code == status
+            assert response.json() == {"code": code}
+        assert upstream.calls == ["summary", "summary"]
+        upstream.failure = None
+        assert (await client.get(PATH)).status_code == 200
+        assert (await client.get(PATH)).status_code == 200
+        assert upstream.calls == ["summary", "summary", "summary"]
+
+
+async def test_transient_search_timeout_retries_once_and_caches_success(upstream):
+    upstream.timeout_once = True
+    app = main.create_app()
+    async with app.router.lifespan_context(app), client_for(app) as client:
+        for _ in range(2):
+            response = await client.get(
+                PATH, params={"q": "Água limpa", "page_size": 9}
+            )
+            assert response.status_code == 200
+            assert len(response.json()["items"]) == 9
+    assert upstream.calls == ["projects", "projects"]
+
+
+async def test_image_fallback_is_returned_without_caching_failed_enrichment(upstream):
+    upstream.uses_images = upstream.image_failure = True
+    app = main.create_app()
+    async with app.router.lifespan_context(app), client_for(app) as client:
+        first = (await client.get(PATH)).json()
+        assert first["items"][0]["image_url"].endswith("/pict.jpg")
+        upstream.image_failure = False
+        second = (await client.get(PATH)).json()
+        third = (await client.get(PATH)).json()
+        assert second["items"] == third["items"]
+        assert third["items"][0]["image_url"] == "https://img.example.org/card.jpg"
+    assert upstream.calls == ["summary", "ids", "summary", "ids"]
+
+
+async def test_lifespan_restart_discards_pages_and_tokens(upstream):
+    app = main.create_app()
+    async with app.router.lifespan_context(app), client_for(app) as client:
+        first = (await client.get(PATH)).json()
+    async with app.router.lifespan_context(app), client_for(app) as client:
+        assert (await client.get(PATH)).status_code == 200
+        invalid = await client.get(
+            PATH, params={"cursor": first["pagination"]["next_cursor"]}
+        )
+        assert invalid.status_code == 400
+    assert upstream.calls == ["summary", "summary"]
+    assert upstream.closed == 2
+
+
+async def test_shutdown_drains_shared_request_before_closing_http_client(upstream):
+    app = main.create_app()
+    upstream.release = asyncio.Event()
+    async with client_for(app) as client:
+        async with app.router.lifespan_context(app):
+            request = asyncio.create_task(client.get(PATH))
+            await upstream.started.wait()
+            request.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await request
+        assert upstream.cancelled.is_set()
+        assert upstream.closed == 1
+
+
+async def test_adapter_rejects_invalid_internal_continuation_even_with_warm_page(
+    upstream,
+):
+    app = main.create_app()
+    async with app.router.lifespan_context(app), client_for(app) as client:
+        first = (await client.get(PATH)).json()
+        assert (
+            await client.get(
+                PATH, params={"cursor": first["pagination"]["next_cursor"]}
+            )
+        ).is_success
+        provider = app.state.projects.provider
+        with pytest.raises(ValueError, match="Invalid discovery continuation"):
+            await provider.discover(continuation=Continuation("invalid"))
+    assert upstream.calls == ["summary", "summary"]
+
+
+def test_uvicorn_access_logger_omits_search_parameters(caplog):
+    with caplog.at_level(logging.INFO, logger="uvicorn.access"):
+        logging.getLogger("uvicorn.access").info(
+            '%s - "%s %s HTTP/%s" %d',
+            "client",
+            "GET",
+            "/api/v1/projects?q=termo-privado&cursor=cursor-privado",
+            "1.1",
+            200,
+        )
+    assert "GET /api/v1/projects HTTP/1.1" in caplog.text
+    assert "termo-privado" not in caplog.text
+    assert "cursor-privado" not in caplog.text

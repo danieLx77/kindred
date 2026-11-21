@@ -153,8 +153,8 @@ fecha o cliente ao encerrar o FastAPI.
 
 O startup do backend resolve `GLOBALGIVING_API_KEY` e passa a chave ao
 provider. A URL base padrão é HTTPS, o timeout
-total e por fase é 10 segundos, a resposta é limitada a 2 MiB e não há retries
-nem redirecionamentos automáticos. HTTPX agora é dependência de execução.
+total e por fase é 10 segundos, a resposta é limitada a 2 MiB e o cliente segue
+sem redirecionamentos automáticos. HTTPX é dependência de execução.
 Logs HTTPX/HTTPcore são suprimidos apenas no contexto dessas chamadas, inclusive
 leitura e fechamento, para não registrar a chave exigida na query string. O
 cliente próprio não instala hooks de tracing nem usa proxies do ambiente.
@@ -181,8 +181,8 @@ do orçamento original de 10 segundos. O adapter reserva 20% desse orçamento
 para a nova tentativa e respeita respostas de limite de taxa sem repeti-las.
 
 As continuações são estado interno assinado, vinculado à consulta e à instância,
-sem armazenamento de páginas. Permitem replay enquanto a instância existir;
-reinício ou outra instância invalida o handle. A assinatura impede adulteração,
+e permitem replay enquanto a instância existir. Reinício ou outra instância
+invalida o handle. A assinatura impede adulteração,
 mas não é criptografia: esses tokens internos não devem ser publicados diretamente
 pela API pública. Filtros de tema/país ainda são rejeitados explicitamente.
 
@@ -194,6 +194,28 @@ ou resposta inválida. Não carrega URL, corpo ou exceção bruta. Um 404 de des
 categorias em códigos HTTP.
 Campos opcionais inválidos são omitidos; ID de projeto inválido rejeita o lote.
 Organização sem ID utilizável não gera referência fictícia.
+
+### Cache de descoberta no backend
+
+A descoberta pública compartilha páginas validadas entre visitantes do mesmo
+processo. O cache usa TTL fixo a partir da conclusão da consulta e remove as
+páginas menos recentemente usadas quando atinge o limite de entradas ou o
+orçamento estimado de 16 MiB de resultados retidos. Para configurar, exporte
+as variáveis no ambiente do backend antes de iniciá-lo:
+
+| Variável | Padrão | Valor aceito |
+| --- | ---: | --- |
+| `KINDRED_DISCOVERY_CACHE_TTL_SECONDS` | 600 | Número finito positivo, em segundos |
+| `KINDRED_DISCOVERY_CACHE_MAX_ENTRIES` | 256 | Inteiro positivo |
+
+Consultas simultâneas equivalentes compartilham uma consulta ao provedor.
+Erros e páginas com falha na obtenção das variantes de imagens são elegíveis
+para uma nova tentativa na próxima requisição. A primeira consulta e as
+consultas após expiração voltam a depender da GlobalGiving. O cache de 60
+segundos por aba da Explore continua reduzindo requisições ao Kindred.
+
+Veja o ciclo de vida, as métricas e as limitações de múltiplos workers na
+[documentação de arquitetura](docs/architecture/architecture.md#15-cache).
 
 ### Detalhe GlobalGiving (issue #13)
 

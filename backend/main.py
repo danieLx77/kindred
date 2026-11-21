@@ -12,6 +12,7 @@ from api.discovery import router as discovery_router
 from api.discovery_cursor import DiscoveryCursors
 from api.project_common import ProjectServices
 from integrations.globalgiving import GlobalGivingProjectProvider
+from projects.discovery_cache import DiscoveryCacheSettings
 from projects.provider import ProjectProvider
 
 logger = logging.getLogger(__name__)
@@ -57,7 +58,9 @@ def create_app(
             yield
             return
 
-        async with GlobalGivingProjectProvider(api_key=api_key) as globalgiving:
+        async with GlobalGivingProjectProvider(
+            api_key=api_key, cache_settings=DiscoveryCacheSettings.from_env()
+        ) as globalgiving:
             app.state.projects = ProjectServices(globalgiving, cursors)
             yield
 
