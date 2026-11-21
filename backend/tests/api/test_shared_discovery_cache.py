@@ -413,6 +413,7 @@ async def test_snapshot_restarts_and_reconstructs_continuation(
         "generated_at",
         "items",
         "has_more",
+        "next_position_hint",
     }
 
     app = main.create_app()
@@ -570,3 +571,243 @@ async def test_unavailable_catalog_without_snapshot_keeps_public_error(
         assert response.status_code == 503
         assert response.json() == {"code": "provider_unavailable"}
     assert not snapshot_file.exists()
+
+
+@pytest.mark.parametrize("recover_before_refresh_finishes", [False, True])
+async def test_invalidation_prevents_in_flight_refresh_from_restoring_snapshot(
+    upstream, snapshot_file, monkeypatch, recover_before_refresh_finishes
+):
+    await generate_snapshot()
+    monkeypatch.setattr(explore_snapshot, "time", lambda: 10_601.0)
+    refresh_started, release_refresh, refresh_finished = (
+        asyncio.Event() for _ in range(3)
+    )
+    original = upstream.respond
+    publish = explore_snapshot.ExploreSnapshot.publish
+    first_read = True
+
+    async def respond(request):
+        nonlocal first_read
+        response = await original(request)
+        if first_read and not request.url.params.get("nextProjectId"):
+            first_read = False
+            refresh_started.set()
+            await release_refresh.wait()
+        return response
+
+    async def track_publication(snapshot, result, **kwargs):
+        await publish(snapshot, result, **kwargs)
+        if kwargs["generation"] == 0:
+            refresh_finished.set()
+
+    monkeypatch.setattr(upstream, "respond", respond)
+    monkeypatch.setattr(explore_snapshot.ExploreSnapshot, "publish", track_publication)
+    app = main.create_app()
+    async with app.router.lifespan_context(app), client_for(app) as client:
+        await asyncio.wait_for(refresh_started.wait(), 2)
+        first = await fetch_explore(client)
+        assert project_ids(first) == list(range(1, 10))
+        upstream.catalog_start = 2
+        rejected = await fetch_explore(client, next_cursor(first))
+        assert rejected.status_code == 400
+        assert rejected.json() == {"code": "invalid_cursor"}
+        assert not snapshot_file.exists()
+
+        recovered_file = None
+        if recover_before_refresh_finishes:
+            first = await asyncio.wait_for(fetch_explore(client), 2)
+            assert project_ids(first) == list(range(2, 11))
+            recovered_file = snapshot_file.read_bytes()
+        release_refresh.set()
+        await asyncio.wait_for(refresh_finished.wait(), 2)
+        if recovered_file is not None:
+            assert snapshot_file.read_bytes() == recovered_file
+        else:
+            assert not snapshot_file.exists()
+
+        first = await fetch_explore(client)
+        assert project_ids(first) == list(range(2, 11))
+        assert project_ids(await fetch_explore(client, next_cursor(first))) == list(
+            range(11, 20)
+        )
+
+
+async def test_snapshot_position_hint_overlaps_catalog_reads_and_shares_one_flight(
+    upstream, snapshot_file, monkeypatch
+):
+    await generate_snapshot()
+    original = upstream.respond
+    first_started, next_started, release = (asyncio.Event() for _ in range(3))
+    positions = []
+
+    async def respond(request):
+        position = request.url.params.get("nextProjectId")
+        positions.append(position)
+        (first_started if position is None else next_started).set()
+        await release.wait()
+        return await original(request)
+
+    monkeypatch.setattr(upstream, "respond", respond)
+    app = main.create_app()
+    async with (
+        app.router.lifespan_context(app),
+        client_for(app) as one,
+        client_for(app) as two,
+    ):
+        first = await fetch_explore(one)
+        cursor = next_cursor(first)
+        pending = asyncio.gather(fetch_explore(one, cursor), fetch_explore(two, cursor))
+        try:
+            await asyncio.wait_for(
+                asyncio.gather(first_started.wait(), next_started.wait()), 2
+            )
+        finally:
+            release.set()
+        second, shared = await pending
+        assert project_ids(second) == project_ids(shared) == list(range(10, 19))
+        assert sorted(positions, key=str) == ["11", None]
+        assert project_ids(await fetch_explore(one, next_cursor(second))) == [
+            19,
+            20,
+            21,
+        ]
+
+
+@pytest.mark.parametrize("catalog_changed", [False, True])
+async def test_snapshot_discards_speculation_when_catalog_or_position_changes(
+    upstream, snapshot_file, monkeypatch, caplog, catalog_changed
+):
+    await generate_snapshot()
+    original = upstream.respond
+    speculative_started, speculative_cancelled = asyncio.Event(), asyncio.Event()
+    positions = []
+    upstream.catalog_start = 2 if catalog_changed else 1
+    upstream.catalog_batch_size = 9  # Confirms position 10 if the first nine IDs match.
+
+    async def respond(request):
+        position = request.url.params.get("nextProjectId")
+        positions.append(position)
+        if position is None:
+            await speculative_started.wait()
+        elif position == "11":
+            speculative_started.set()
+            try:
+                await asyncio.Future()
+            except asyncio.CancelledError:
+                speculative_cancelled.set()
+                raise
+        return await original(request)
+
+    monkeypatch.setattr(upstream, "respond", respond)
+    caplog.set_level(logging.DEBUG, logger="integrations.globalgiving.discovery")
+    app = main.create_app()
+    async with app.router.lifespan_context(app), client_for(app) as client:
+        first = await fetch_explore(client)
+        response = await asyncio.wait_for(fetch_explore(client, next_cursor(first)), 2)
+        assert speculative_cancelled.is_set()
+        assert "speculative_batch_discarded" in caplog.text
+        if catalog_changed:
+            assert response.status_code == 400
+            assert response.json() == {"code": "invalid_cursor"}
+            assert not snapshot_file.exists()
+            assert sorted(positions, key=str) == ["11", None]
+        else:
+            assert project_ids(response) == list(range(10, 19))
+            assert "position_hint_mismatch" in caplog.text
+            assert sorted(positions, key=str) == ["10", "11", None]
+            assert project_ids(await fetch_explore(client, next_cursor(response))) == [
+                19,
+                20,
+                21,
+            ]
+
+
+@pytest.mark.parametrize("failed_position", [None, "11"])
+@pytest.mark.parametrize("failure, expected", [(429, 503), ("timeout", 504)])
+async def test_snapshot_preserves_errors_from_either_confirmed_batch(
+    upstream, snapshot_file, monkeypatch, failed_position, failure, expected
+):
+    await generate_snapshot()
+    original = upstream.respond
+
+    async def respond(request):
+        if request.url.params.get("nextProjectId") == failed_position:
+            if failure == "timeout":
+                raise httpx.ReadTimeout("fixture", request=request)
+            return httpx.Response(failure)
+        return await original(request)
+
+    monkeypatch.setattr(upstream, "respond", respond)
+    app = main.create_app()
+    async with app.router.lifespan_context(app), client_for(app) as client:
+        first = await fetch_explore(client)
+        second = await fetch_explore(client, next_cursor(first))
+        assert second.status_code == expected
+        assert snapshot_file.exists()
+
+
+async def test_snapshot_without_saved_hint_remains_compatible(upstream, snapshot_file):
+    await generate_snapshot()
+    page = json.loads(snapshot_file.read_text())
+    page.pop("next_position_hint")
+    snapshot_file.write_text(json.dumps(page))
+    app = main.create_app()
+    async with app.router.lifespan_context(app), client_for(app) as client:
+        first = await fetch_explore(client)
+        assert project_ids(first) == list(range(1, 10))
+        assert upstream.calls == ["summary"]
+        assert project_ids(await fetch_explore(client, next_cursor(first))) == list(
+            range(10, 19)
+        )
+
+
+async def test_snapshot_keeps_public_cards_when_dynamic_image_has_query(
+    upstream, snapshot_file, monkeypatch
+):
+    original = upstream.respond
+    image = "https://images.example.org/first.jpg?width=300"
+
+    async def respond(request):
+        response = await original(request)
+        data = response.json()
+        first = data["projects"]["project"][0]
+        first.update(imageLink=image, summary="Public summary")
+        return httpx.Response(200, json=data)
+
+    monkeypatch.setattr(upstream, "respond", respond)
+    dynamic = await generate_snapshot()
+    assert dynamic.json()["items"][0]["image_url"] == image
+    assert image not in snapshot_file.read_text()
+
+    app = main.create_app()
+    async with app.router.lifespan_context(app), client_for(app) as client:
+        response = await fetch_explore(client)
+        assert project_ids(response) == list(range(1, 10))
+        card = response.json()["items"][0]
+        assert card["summary"] == "Public summary" and card["image_url"] is None
+        assert upstream.calls == ["summary"]
+
+
+async def test_snapshot_ignores_failed_speculation_when_position_is_not_confirmed(
+    upstream, snapshot_file, monkeypatch
+):
+    await generate_snapshot()
+    original = upstream.respond
+    upstream.catalog_batch_size = 9
+    stale_response_ready = asyncio.Event()
+
+    async def respond(request):
+        position = request.url.params.get("nextProjectId")
+        if position == "11":
+            stale_response_ready.set()
+            return httpx.Response(429)
+        if position is None:
+            await stale_response_ready.wait()
+        return await original(request)
+
+    monkeypatch.setattr(upstream, "respond", respond)
+    app = main.create_app()
+    async with app.router.lifespan_context(app), client_for(app) as client:
+        first = await fetch_explore(client)
+        second = await asyncio.wait_for(fetch_explore(client, next_cursor(first)), 2)
+        assert project_ids(second) == list(range(10, 19))

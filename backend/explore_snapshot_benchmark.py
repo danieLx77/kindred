@@ -20,7 +20,7 @@ import httpx
 import uvloop
 
 import main
-from discovery_cache_benchmark import Upstream
+from discovery_cache_benchmark import Upstream, project
 from integrations.globalgiving import GlobalGivingProjectProvider
 
 
@@ -30,6 +30,7 @@ class Mock(Upstream):
         self.wait = None
         self.entered = asyncio.Event()
         self.unavailable = False
+        self.catalog_changed = False
 
     async def __call__(self, request):
         self.entered.set()
@@ -39,6 +40,23 @@ class Mock(Upstream):
             self.calls += 1
             await asyncio.sleep(self.delay)
             return httpx.Response(503)
+        if (
+            self.catalog_changed
+            and request.url.path.endswith("/summary")
+            and "nextProjectId" not in request.url.params
+        ):
+            self.calls += 1
+            await asyncio.sleep(self.delay)
+            return httpx.Response(
+                200,
+                json={
+                    "projects": {
+                        "project": [project(i) for i in range(2, 12)],
+                        "hasNext": True,
+                        "nextProjectId": 12,
+                    }
+                },
+            )
         return await super().__call__(request)
 
 
@@ -74,7 +92,7 @@ async def main_bench():
     file_bytes = []
     memory = []
     refresh_ms = []
-    for scenario in (
+    scenarios = (
         "cold",
         "restart",
         "available",
@@ -84,7 +102,10 @@ async def main_bench():
         "down",
         "expired",
         "next",
-    ):
+    )
+    if not baseline:
+        scenarios += ("page_two", "page_three", "invalidated", "recovered")
+    for scenario in scenarios:
         rows = []
         sampled_events: Counter[str] = Counter()
         sampled_age: list[float] = []
@@ -173,10 +194,42 @@ async def main_bench():
                                 asyncio.get_running_loop().call_later(
                                     0.075, upstream.wait.set
                                 )
+                        cursor = None
+                        expected_status = (
+                            503 if baseline and scenario == "down" else 200
+                        )
+                        expected_start = 1
+                        if scenario in {
+                            "page_two",
+                            "page_three",
+                            "invalidated",
+                            "recovered",
+                        }:
+                            first = await get(session)
+                            cursor = first.json()["pagination"]["next_cursor"]
+                            assert cursor
+                            if scenario == "page_three":
+                                second = await get(session, cursor)
+                                cursor = second.json()["pagination"]["next_cursor"]
+                                assert cursor
+                                expected_start = 19
+                            elif scenario == "page_two":
+                                expected_start = 10
+                            else:
+                                upstream.catalog_changed = True
+                                if scenario == "recovered":
+                                    assert (
+                                        await get(session, cursor)
+                                    ).status_code == 400
+                                    cursor = None
+                                    expected_start = 2
+                                else:
+                                    expected_status = 400
+                            before = upstream.calls
                         events.counts.clear()
                         events.snapshot_age.clear()
                         start = perf_counter()
-                        response = await get(session)
+                        response = await get(session, cursor)
                         first_ms = (perf_counter() - start) * 1000
                         if scenario == "next":
                             second = await get(
@@ -187,13 +240,13 @@ async def main_bench():
                             ] == list(range(10, 19))
                         elapsed = (perf_counter() - start) * 1000
                         calls = upstream.calls - before
-                        assert response.status_code == (
-                            503 if baseline and scenario == "down" else 200
-                        )
+                        assert response.status_code == expected_status
+                        if expected_status == 400:
+                            assert response.json() == {"code": "invalid_cursor"}
                         if response.is_success:
                             assert [
                                 int(p["id"]) for p in response.json()["items"]
-                            ] == list(range(1, 10))
+                            ] == list(range(expected_start, expected_start + 9))
                         if attempt:
                             rows.append((round(elapsed, 2), calls, round(first_ms, 2)))
                             sampled_events.update(events.counts)
@@ -207,6 +260,9 @@ async def main_bench():
             "interval": [min(values), median(values), max(values)],
             "calls": sorted(set(calls)),
             "first_ms": median(first),
+            "speculative_batches_discarded": sampled_events[
+                "explore_snapshot.speculative_batch_discarded"
+            ],
             "cache_events_in_seven_samples": dict(sampled_events),
             "snapshot_age_seconds": [min(sampled_age), max(sampled_age)]
             if sampled_age

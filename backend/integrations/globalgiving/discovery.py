@@ -65,7 +65,7 @@ class GlobalGivingDiscoveryAdapter:
         )
         self._signing_key = secrets.token_bytes(32)
         self._cache = (
-            DiscoveryCache[_CacheKey](cache_settings)
+            DiscoveryCache[tuple[_CacheKey, int | None]](cache_settings)
             if cache_settings is not None
             else None
         )
@@ -85,9 +85,10 @@ class GlobalGivingDiscoveryAdapter:
         while True:
             started = perf_counter()
             try:
+                generation = snapshot.generation
                 if self._cache is not None:
-                    self._cache.discard(_EXPLORE_KEY)
-                await self._resolve_page(_EXPLORE_KEY, "")
+                    self._cache.discard((_EXPLORE_KEY, generation))
+                await self._resolve_page(_EXPLORE_KEY, "", generation=generation)
             except ProviderError as error:
                 logger.warning(
                     "explore_snapshot event=refresh_failed reason=%s",
@@ -117,11 +118,23 @@ class GlobalGivingDiscoveryAdapter:
         if continuation is not None:
             position, skip, hint, prefix = self._decode(continuation, query)
         elif self._snapshot is not None and query == EXPLORE_QUERY:
-            page = self._snapshot.current()
+            return await self._discover_explore(self._snapshot)
+
+        return await self._resolve_page((query, position, skip, hint, prefix), text)
+
+    async def _discover_explore(self, snapshot: ExploreSnapshot) -> DiscoveryResult:
+        while True:
+            page = snapshot.current()
             if page is not None:
                 items = page.summaries()
                 next_page = (
-                    self._encode(query, None, len(items), prefix=prefix_digest(items))
+                    self._encode(
+                        EXPLORE_QUERY,
+                        None,
+                        len(items),
+                        page.next_position_hint,
+                        prefix=prefix_digest(items),
+                    )
                     if page.has_more
                     else None
                 )
@@ -130,21 +143,43 @@ class GlobalGivingDiscoveryAdapter:
                     time() - page.generated_at,
                 )
                 return DiscoveryResult(items, next_page)
+
             logger.debug("explore_snapshot event=miss")
+            generation = snapshot.generation
+            try:
+                result = await self._resolve_page(
+                    _EXPLORE_KEY, "", generation=generation
+                )
+            except ProviderError:
+                if generation == snapshot.generation:
+                    raise
+            else:
+                if generation == snapshot.generation:
+                    return result
 
-        return await self._resolve_page((query, position, skip, hint, prefix), text)
-
-    async def _resolve_page(self, key: _CacheKey, text: str) -> DiscoveryResult:
+    async def _resolve_page(
+        self, key: _CacheKey, text: str, *, generation: int | None = None
+    ) -> DiscoveryResult:
         async def load() -> tuple[DiscoveryResult, bool]:
             result, complete = await self._discover_page(key, text)
-            if complete and key == _EXPLORE_KEY and self._snapshot is not None:
-                await self._snapshot.publish(result)
+            snapshot = self._snapshot
+            if complete and generation is not None and snapshot is not None:
+                next_position_hint = None
+                if result.continuation is not None:
+                    position, skip, hint, _ = self._decode(
+                        result.continuation, EXPLORE_QUERY
+                    )
+                    next_position_hint = hint if skip else position
+                await snapshot.publish(
+                    result, generation=generation, next_position_hint=next_position_hint
+                )
+                complete = generation == snapshot.generation
             return result, complete
 
         if self._cache is None:
             result, _ = await load()
             return result
-        return await self._cache.resolve(key, load)
+        return await self._cache.resolve((key, generation), load)
 
     async def _discover_page(
         self, key: _CacheKey, text: str
@@ -188,15 +223,15 @@ class GlobalGivingDiscoveryAdapter:
         following = (
             asyncio.create_task(self._listing_batch(hint)) if hint is not None else None
         )
+        following_used = False
         try:
             projects, next_position = await self._listing_batch(position)
             if prefix is not None:
                 if len(projects) < skip or prefix_digest(projects[:skip]) != prefix:
-                    if self._snapshot is not None and await self._snapshot.discard(
-                        prefix
-                    ):
-                        if self._cache is not None:
-                            self._cache.discard(_EXPLORE_KEY)
+                    if self._snapshot is not None:
+                        generation = await self._snapshot.discard(prefix)
+                        if generation is not None and self._cache is not None:
+                            self._cache.discard((_EXPLORE_KEY, generation))
                     raise InvalidDiscoveryContinuation
             elif skip and skip >= len(projects):
                 raise invalid_response()
@@ -205,12 +240,15 @@ class GlobalGivingDiscoveryAdapter:
                 if prefix is not None
                 else set()
             )
+            if prefix is not None and hint is not None and hint != next_position:
+                logger.debug("explore_snapshot event=position_hint_mismatch")
             items = projects[skip : skip + query.page_size]
             consumed = skip + len(items)
             if skip and len(items) < query.page_size and next_position is not None:
                 # Finish a page that starts with the remainder of a split batch.
                 position = next_position
                 if following is not None and position == hint:
+                    following_used = True
                     projects, next_position = await following
                 else:
                     if following is not None:
@@ -239,6 +277,8 @@ class GlobalGivingDiscoveryAdapter:
             if following is not None:
                 following.cancel()
                 await asyncio.gather(following, return_exceptions=True)
+                if prefix is not None and not following_used:
+                    logger.debug("explore_snapshot event=speculative_batch_discarded")
 
     async def _listing_batch(
         self, position: int | None
@@ -354,7 +394,6 @@ class GlobalGivingDiscoveryAdapter:
                 query != EXPLORE_QUERY
                 or position is not None
                 or skip != query.page_size
-                or hint is not None
                 or not isinstance(prefix, str)
                 or not re.fullmatch(r"[0-9a-f]{64}", prefix)
             ):

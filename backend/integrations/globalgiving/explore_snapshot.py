@@ -51,17 +51,20 @@ class _Page(_PublicData):
     provider: Literal["globalgiving"] = "globalgiving"
     generated_at: float = Field(gt=0, allow_inf_nan=False)
     has_more: bool
+    next_position_hint: int | None = Field(default=None, gt=0)
     items: tuple[_Card, ...] = Field(min_length=1, max_length=9)
 
     @model_validator(mode="after")
     def validate_items(self) -> "_Page":
         if self.has_more and len(self.items) != EXPLORE_QUERY.page_size:
             raise ValueError("A continued snapshot needs a full page")
+        if self.next_position_hint is not None and not self.has_more:
+            raise ValueError("A snapshot hint requires a continuation")
         if len({item.id for item in self.items}) != len(self.items):
             raise ValueError("Duplicate project in snapshot")
         for item in self.items:
             url = item.image_url
-            if url is not None and (safe_url(url) != url or urlsplit(url).query):
+            if url is not None and (_snapshot_image(url) is None):
                 raise ValueError(
                     "Snapshot image must have a public URL without parameters"
                 )
@@ -82,6 +85,13 @@ class _Page(_PublicData):
             )
             for item in self.items
         )
+
+
+def _snapshot_image(url: str | None) -> str | None:
+    if url is None or safe_url(url) != url:
+        return None
+    parsed = urlsplit(url)
+    return None if parsed.query or parsed.fragment else url
 
 
 def prefix_digest(items: tuple[ProjectSummary, ...]) -> str:
@@ -114,7 +124,12 @@ class ExploreSnapshot:
         self.path = path
         self.refresh_seconds = refresh_seconds
         self._page: _Page | None = None
+        self._generation = 0
         self._write_lock = asyncio.Lock()
+
+    @property
+    def generation(self) -> int:
+        return self._generation
 
     @classmethod
     def from_env(cls) -> "ExploreSnapshot | None":
@@ -155,7 +170,13 @@ class ExploreSnapshot:
             max(0, self.refresh_seconds - (time() - page.generated_at)) if page else 0
         )
 
-    async def publish(self, result: DiscoveryResult) -> None:
+    async def publish(
+        self,
+        result: DiscoveryResult,
+        *,
+        generation: int,
+        next_position_hint: int | None = None,
+    ) -> None:
         # A valid empty result can still be returned dynamically. It cannot
         # replace a usable seed, which may be retained only up to its age limit.
         if not result.items:
@@ -164,12 +185,13 @@ class ExploreSnapshot:
             page = _Page(
                 generated_at=time(),
                 has_more=result.continuation is not None,
+                next_position_hint=next_position_hint,
                 items=tuple(
                     _Card(
                         id=item.id,
                         title=item.title,
                         summary=item.summary,
-                        image_url=item.image_url,
+                        image_url=_snapshot_image(item.image_url),
                         theme=item.theme,
                         country=item.country,
                         organization=_Organization(
@@ -188,6 +210,9 @@ class ExploreSnapshot:
             logger.warning("explore_snapshot event=publication_rejected")
             return
         async with self._write_lock:
+            if generation != self.generation:
+                logger.debug("explore_snapshot event=stale_publication_discarded")
+                return
             try:
                 await self._finish_io(asyncio.to_thread(_atomic_write, self.path, body))
             except OSError:
@@ -199,11 +224,13 @@ class ExploreSnapshot:
                 page.generated_at,
             )
 
-    async def discard(self, expected_prefix: str) -> bool:
+    async def discard(self, expected_prefix: str) -> int | None:
         async with self._write_lock:
-            page = self.current()
+            page = self._page
             if page is None or prefix_digest(page.summaries()) != expected_prefix:
-                return False
+                return None
+            invalidated_generation = self.generation
+            self._generation += 1
             self._page = None
             try:
                 await self._finish_io(
@@ -211,7 +238,7 @@ class ExploreSnapshot:
                 )
             except OSError:
                 logger.warning("explore_snapshot event=unlink_failed")
-            return True
+            return invalidated_generation
 
     @staticmethod
     async def _finish_io(operation: Coroutine[Any, Any, None]) -> None:

@@ -560,13 +560,17 @@ usa transportes simulados. Cada instância habilitada tem uma tarefa de
 atualização no lifespan. Use um worker e um escritor por volume.
 
 O arquivo JSON tem esquema versionado, provedor, timestamp, cards públicos e
-um indicador de continuação. A validação rejeita campos desconhecidos,
-registros duplicados, páginas incompletas com continuação, URLs de imagem
-com parâmetros e arquivos acima de 128 KiB. O adaptador mapeia a resposta
+um indicador de continuação e, quando disponível, uma pista numérica para o
+lote seguinte. Arquivos anteriores sem a pista continuam legíveis. A validação
+rejeita campos desconhecidos, registros duplicados, páginas incompletas com
+continuação e arquivos acima de 128 KiB. Na geração, URLs de imagem
+inválidas, com credenciais, parâmetros ou fragmentos são omitidas do card
+sem remover os demais dados. Na leitura, o schema continua rejeitando
+arquivos que contenham uma URL inadequada. O adaptador mapeia a resposta
 pelas mesmas rotinas de descoberta da Fase 1. A geração escreve em um arquivo
 temporário no mesmo diretório e publica com substituição atômica. O arquivo
-guarda apenas o que é necessário para os cards e omite chaves, URLs
-autenticadas, cursores e posições internas.
+guarda os dados públicos dos cards e a pista opcional. Chaves, URLs
+autenticadas e cursores ficam fora do arquivo.
 
 A rota pública autentica a continuação vinda do cliente. Para o catálogo
 inicial de nove itens, um snapshot válido prevalece sobre o cache dinâmico.
@@ -574,10 +578,17 @@ No processo atual, o adaptador assina uma continuação que vincula o
 deslocamento ao resumo criptográfico dos IDs ordenados apresentados. Ao
 avançar, a primeira carga do segundo lote confere esses IDs no catálogo,
 consome a sobra do lote atual e segue usando o `nextProjectId` observado na
-mesma leitura. Se os primeiros IDs mudaram, a API retorna o erro
-`400 invalid_cursor`, o backend descarta o snapshot correspondente e a
-Explore permite voltar à primeira página. Uma resposta de página 2 já
-validada pode ser reutilizada no seu TTL por meio do `DiscoveryCache`.
+mesma leitura. A pista pode antecipar a segunda consulta em paralelo, mas o
+resultado só é aceito se a ordem e a posição forem confirmadas pelo primeiro
+lote. Se apenas a posição divergir, o adaptador descarta a consulta
+especulativa e usa a posição atual. Se os primeiros IDs mudaram, a API
+retorna `400 invalid_cursor`, o backend descarta o snapshot correspondente e a
+Explore permite voltar à primeira página. O descarte avança a geração do
+snapshot, bloqueando publicações iniciadas na geração anterior. A geração
+também faz parte da chave single-flight da primeira página, portanto a
+recuperação pode usar uma carga atual mesmo com uma atualização antiga
+pendente. O `DiscoveryCache` pode reutilizar uma segunda página já
+validada dentro do TTL.
 Depois de um reinício, abrir novamente a primeira página emite um novo
 cursor. A GlobalGiving pode mudar o catálogo entre chamadas e a navegação
 continua sujeita a essas mudanças.
@@ -603,7 +614,10 @@ e [termos de uso](https://www.globalgiving.org/api/legal/terms-of-service/).
 O benchmark usa `uv run --locked python explore_snapshot_benchmark.py` em
 `backend/`. Para medir a base, copie o script para fora do repositório e
 execute `PYTHONPATH=. uv run --locked python /caminho/do/script.py --before`
-em `backend/` do checkout da Fase 1. O transporte de teste simula latências
+em `backend/` do checkout da Fase 1. Para comparar duas revisões da Fase 2,
+execute a mesma cópia externa em cada checkout, sem `--before`. Os cenários
+incluem avanço para a segunda e a terceira página, catálogo alterado e
+recuperação após invalidação. O transporte de teste simula latências
 e indisponibilidade. Os eventos `explore_snapshot` permitem conferir idade,
 duração de atualização e falhas sem emitir dados de projeto.
 
